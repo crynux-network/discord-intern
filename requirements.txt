@@ -3,3 +3,4 @@ langgraph==1.0.5
 pydantic==2.12.5
 PyYAML==6.0.2
 python-dotenv==1.0.1
+aiohttp==3.10.5

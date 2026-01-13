@@ -29,3 +29,13 @@ class MockAIClient:
                 "platform": context.platform,
             },
         )
+
+    async def summarize_for_kb_index(
+        self,
+        *,
+        source_id: str,
+        text: str,
+        timeout_seconds: float,
+    ) -> str:
+        """Return a short plain-text description for the Knowledge Base index."""
+        return f"Mock summary for {source_id}: {text[:50]}..."

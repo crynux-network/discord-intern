@@ -69,16 +69,24 @@ Notes:
 - Environment variables can override string keys using the `APP__` prefix (see `docs/configuration.md`).
 - Control which channels are monitored by granting (or denying) channel visibility for the **Community Intern** role on a per-channel (or per-category) basis.
 
-### 4) Run the bot (mock AI mode)
+### 4) Initialize Knowledge Base
+
+Before running the bot, initialize the knowledge base index. This will scan your sources folder and fetch any web links.
+
+```bash
+python -m discord_intern init_kb
+```
+
+### 5) Run the bot (mock AI mode)
 
 This project currently ships with a mock AI client that always replies with a fixed message. This lets you validate Discord connectivity, routing, and thread creation before implementing the full AI module.
 
 ```bash
-python -m discord_intern
+python -m discord_intern run
 ```
 
 Optional: override the mock reply text:
 
 ```bash
-python -m discord_intern --mock-reply-text "Hello from Discord Intern (mock)."
+python -m discord_intern run --mock-reply-text "Hello from Discord Intern (mock)."
 ```

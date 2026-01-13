@@ -51,7 +51,7 @@ class KnowledgeBaseSettings(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     sources_dir: str = "data/knowledge-base/sources"
-    index_path: str = "data/knowledge-base/index.json"
+    index_path: str = "data/knowledge-base/index.txt"
 
     web_fetch_timeout_seconds: float = 10
     web_fetch_cache_dir: str = "data/knowledge-base/web-cache"
