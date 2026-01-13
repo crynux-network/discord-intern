@@ -1,62 +1,68 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 from typing import Optional, Sequence
+
+from pydantic import BaseModel, ConfigDict, Field
 
 from discord_intern.ai.interfaces import AIConfig
 
 
-@dataclass(frozen=True, slots=True)
-class AppSettings:
-    dry_run: bool
+class AppSettings(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    dry_run: bool = False
 
 
-@dataclass(frozen=True, slots=True)
-class FileRotationSettings:
+class FileRotationSettings(BaseModel):
     """
     Date-based rotation settings (daily).
 
     This maps cleanly to Python's standard library TimedRotatingFileHandler behavior.
     """
 
-    backup_count: int
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    backup_count: int = 5
 
 
-@dataclass(frozen=True, slots=True)
-class FileLoggingSettings:
-    path: str
-    rotation: FileRotationSettings
+class FileLoggingSettings(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    path: str = ""
+    rotation: FileRotationSettings = Field(default_factory=FileRotationSettings)
 
 
-@dataclass(frozen=True, slots=True)
-class LoggingSettings:
-    level: str
-    file: FileLoggingSettings
+class LoggingSettings(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    level: str = "INFO"
+    file: FileLoggingSettings = Field(default_factory=FileLoggingSettings)
 
 
-@dataclass(frozen=True, slots=True)
-class DiscordSettings:
-    token: str
-    monitored_channel_ids: Sequence[str]
-    ai_timeout_seconds: float
+class DiscordSettings(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    token: str = "REPLACE_ME"
+    monitored_channel_ids: tuple[str, ...] = ()
+    ai_timeout_seconds: float = 30
 
 
-@dataclass(frozen=True, slots=True)
-class KnowledgeBaseSettings:
-    sources_dir: str
-    index_path: str
+class KnowledgeBaseSettings(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid")
 
-    web_fetch_timeout_seconds: float
-    web_fetch_cache_dir: str
+    sources_dir: str = "kb/sources"
+    index_path: str = "kb/index.json"
 
-    max_source_bytes: int
-    max_snippet_chars: int
-    max_snippets_per_query: int
-    max_sources_per_query: int
+    web_fetch_timeout_seconds: float = 10
+    web_fetch_cache_dir: str = "kb/web-cache"
+
+    max_source_bytes: int = 2_000_000
+    max_snippet_chars: int = 1200
+    max_snippets_per_query: int = 10
+    max_sources_per_query: int = 6
 
 
-@dataclass(frozen=True, slots=True)
-class AppConfig:
+class AppConfig(BaseModel):
     """
     Effective runtime configuration after applying all precedence rules.
 
@@ -64,14 +70,15 @@ class AppConfig:
     implemented at this stage.
     """
 
-    app: AppSettings
-    logging: LoggingSettings
-    discord: DiscordSettings
-    ai: AIConfig
-    kb: KnowledgeBaseSettings
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    app: AppSettings = Field(default_factory=AppSettings)
+    logging: LoggingSettings = Field(default_factory=LoggingSettings)
+    discord: DiscordSettings = Field(default_factory=DiscordSettings)
+    ai: AIConfig = Field(default_factory=AIConfig)
+    kb: KnowledgeBaseSettings = Field(default_factory=KnowledgeBaseSettings)
 
 
-@dataclass(frozen=True, slots=True)
 class ConfigLoadRequest:
     """
     Optional inputs for a configuration loader.

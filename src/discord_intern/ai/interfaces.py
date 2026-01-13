@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 from typing import Any, Mapping, Protocol, TypeVar
+
+from pydantic import BaseModel, ConfigDict
 
 from discord_intern.core.models import AIResult, Conversation, RequestContext
 
@@ -11,27 +12,28 @@ class AIClient(Protocol):
         """Return a single normalized decision + optional reply."""
 
 
-@dataclass(frozen=True, slots=True)
-class AIConfig:
+class AIConfig(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
     # Timeouts and retries
-    request_timeout_seconds: float
-    llm_timeout_seconds: float
-    max_retries: int
+    request_timeout_seconds: float = 30
+    llm_timeout_seconds: float = 20
+    max_retries: int = 2
 
     # Prompts and policy
-    gating_prompt: str
-    answer_prompt: str
-    verification_prompt: str
+    gating_prompt: str = ""
+    answer_prompt: str = ""
+    verification_prompt: str = ""
 
     # Retrieval policy
-    max_sources: int
-    max_snippets: int
-    max_snippet_chars: int
-    min_snippet_score: float
+    max_sources: int = 6
+    max_snippets: int = 10
+    max_snippet_chars: int = 1200
+    min_snippet_score: float = 0.15
 
     # Output policy
-    max_answer_chars: int
-    require_citations: bool
+    max_answer_chars: int = 3000
+    require_citations: bool = True
 
 
 T = TypeVar("T")
