@@ -35,6 +35,7 @@ The Knowledge Base reads these keys under the `kb` section:
 
 - `kb.sources_dir`
 - `kb.index_path`
+- `kb.links_file_path`
 - `kb.web_fetch_timeout_seconds`
 - `kb.web_fetch_cache_dir`
 - `kb.max_source_bytes`
@@ -69,7 +70,8 @@ See `src/community_intern/kb/interfaces.py` `KnowledgeBase`.
 ### File scanning
 
 - Scan `kb.sources_dir` for text files.
-- Extract embedded HTTP/HTTPS links from file content to form URL sources.
+- Read `kb.links_file_path` to obtain a list of URL sources (one URL per line).
+- Note: The `links.txt` file itself is NOT summarized; only the content of the URLs it lists is processed.
 
 ### URL fetching
 
@@ -138,11 +140,8 @@ Metrics:
 ## Test plan
 
 - Unit tests:
-  - Link extraction from file content
+  - Link reading from links file
   - Index read/write and format validation
 - Integration tests:
   - Build index from a sample folder with a mix of files and URLs
   - Loading selected source content returns stable identifiers
-
-
-

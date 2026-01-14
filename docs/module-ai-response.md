@@ -64,6 +64,10 @@ The AI module is configured under the `ai` section in `config.yaml`.
 
 ### Keys
 
+- `ai.llm_base_url`: Base URL for the LLM API.
+- `ai.llm_api_key`: API key for the LLM.
+- `ai.llm_model`: Model name to use (e.g. gpt-4o).
+
 - `ai.request_timeout_seconds`: End-to-end timeout for `generate_reply`.
 - `ai.llm_timeout_seconds`: Per LLM call timeout.
 - `ai.max_retries`: Maximum retry attempts for transient provider failures.
@@ -301,6 +305,3 @@ The AI module MUST return a single normalized result:
 - `reply_text: str | None`
 - `citations: list[Citation]`
 - `debug: dict | None` never post to users
-
-
-

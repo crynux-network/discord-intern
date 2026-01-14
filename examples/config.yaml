@@ -13,6 +13,10 @@ discord:
   ai_timeout_seconds: 30
 
 ai:
+  llm_base_url: "https://bridge.crynux-as.xyz/v1/llm"
+  llm_api_key: "REPLACE_ME"
+  llm_model: "Qwen/Qwen2.5-7B"
+
   request_timeout_seconds: 30
   llm_timeout_seconds: 20
   max_retries: 2
@@ -20,6 +24,16 @@ ai:
   gating_prompt: |
     You are a classifier. Decide if the user message is a question and whether it is in scope.
     Return a strict JSON object.
+
+  selection_prompt: |
+    Select the most relevant sources from the index to answer the user query.
+    Return a strict JSON list of source_ids.
+
+  summarization_prompt: |
+    Summarize the provided text for a knowledge base index.
+    The summary must be short, plain English, and focused on what the source covers and when it is relevant.
+    Do not output intermediate steps such as thoughts; only provide the final answer.
+    Do not add any preamble or markdown formatting.
 
   answer_prompt: |
     You are a helpful assistant. Answer using the provided snippets and cite sources by source_id.
@@ -38,9 +52,10 @@ ai:
 
 kb:
   sources_dir: "data/knowledge-base/sources"
-  index_path: "data/knowledge-base/index.json"
+  index_path: "data/knowledge-base/index.txt"
+  links_file_path: "data/knowledge-base/links.txt"
 
-  web_fetch_timeout_seconds: 10
+  web_fetch_timeout_seconds: 30
   web_fetch_cache_dir: "data/knowledge-base/web-cache"
 
   max_source_bytes: 2000000

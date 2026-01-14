@@ -24,44 +24,29 @@ class AIClient(Protocol):
 class AIConfig(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
+    # LLM Settings
+    llm_base_url: str
+    llm_api_key: str
+    llm_model: str
+
     # Timeouts and retries
-    request_timeout_seconds: float = 30
-    llm_timeout_seconds: float = 20
-    max_retries: int = 2
+    request_timeout_seconds: float
+    llm_timeout_seconds: float
+    max_retries: int
 
     # Prompts and policy
-    gating_prompt: str = ""
-    selection_prompt: str = ""
-    summarization_prompt: str = ""
-    answer_prompt: str = ""
-    verification_prompt: str = ""
+    gating_prompt: str
+    selection_prompt: str
+    summarization_prompt: str
+    answer_prompt: str
+    verification_prompt: str
 
     # Retrieval policy
-    max_sources: int = 6
-    max_snippets: int = 10
-    max_snippet_chars: int = 1200
-    min_snippet_score: float = 0.15
+    max_sources: int
+    max_snippets: int
+    max_snippet_chars: int
+    min_snippet_score: float
 
     # Output policy
-    max_answer_chars: int = 3000
-    require_citations: bool = True
-
-
-T = TypeVar("T")
-
-
-class LLMClient(Protocol):
-    async def complete_text(self, *, prompt: str, timeout_seconds: float) -> str:
-        """Return plain text output."""
-
-    async def complete_json(
-        self,
-        *,
-        prompt: str,
-        schema: Mapping[str, Any],
-        timeout_seconds: float,
-    ) -> dict[str, Any]:
-        """Return structured JSON output matching the provided schema."""
-
-
-
+    max_answer_chars: int
+    require_citations: bool

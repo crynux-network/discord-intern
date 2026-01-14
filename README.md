@@ -25,15 +25,7 @@ See `docs/` for architecture and module-level documentation, plus configuration 
 
 ## Get Started
 
-### 1) Install dependencies
-
-```bash
-python -m venv .venv
-.venv\Scripts\activate
-pip install -r requirements.txt
-```
-
-### 2) Create a Discord bot and enable message content intent
+### 1) Create a Discord bot and enable message content intent
 
 - Create an application + bot in the Discord Developer Portal.
 - Enable **Message Content Intent** for the bot (required to read message text).
@@ -45,42 +37,60 @@ pip install -r requirements.txt
   - **Create Public Threads** (and/or **Create Private Threads**, depending on your usage)
   - **Send Messages in Threads**
 
-### 3) Create `config.yaml`
+### 2) Install dependencies
+
+```bash
+$ python -m venv venv
+$ ./venv/bin/activate
+(venv) $ pip install -r requirements.txt
+(venv) $ pip install .
+```
+
+### 3) Configure the application
+
+**a) Create `data/config/config.yaml`**
 
 Start from `examples/config.yaml` and copy it to `data/config/config.yaml`.
 
-At minimum, set:
-
-- `discord.token`: your bot token
-
-Example:
-
 ```yaml
-discord:
-  token: "YOUR_BOT_TOKEN"
-  ai_timeout_seconds: 30
+# Any OpenAI-compatible chat completion API could be used
+ai:
+  llm_base_url: "https://bridge.crynux-as.xyz/v1/llm"
+  llm_model: "Qwen/Qwen2.5-7B"
+```
 
-app:
-  dry_run: false
+**b) Create `.env` for secrets**
+
+Create a `.env` file in the root directory (same level as `pyproject.toml`) to store sensitive keys.
+
+```bash
+APP__DISCORD__TOKEN=your_discord_bot_token
+APP__AI__LLM_API_KEY=your_llm_api_key
 ```
 
 Notes:
 
-- Environment variables can override string keys using the `APP__` prefix (see `docs/configuration.md`).
-- Control which channels are monitored by granting (or denying) channel visibility for the **Community Intern** role on a per-channel (or per-category) basis.
+- Environment variables in `.env` override values in `config.yaml` using the `APP__` prefix (e.g., `APP__DISCORD__TOKEN` overrides `discord.token`).
 
-### 4) Initialize Knowledge Base
+### 4) Setup Knowledge Base Sources
+
+Add your documentation to the knowledge base so the bot can answer questions.
+
+- **Local Files**: Place text files (Markdown, .txt, etc.) in the `data/knowledge-base/sources/` directory.
+- **Web Links**: List URLs in `data/knowledge-base/links.txt` (one URL per line). The bot will fetch and index the content of these pages.
+
+### 5) Initialize Knowledge Base
 
 Before running the bot, initialize the knowledge base index. This will scan your sources folder and fetch any web links.
 
 ```bash
-python -m community_intern init_kb
+(venv) $ python -m community_intern init_kb
 ```
 
-### 5) Run the bot (mock AI mode)
+### 6) Run the bot
 
 This project currently ships with a mock AI client that always replies with a fixed message. This lets you validate Discord connectivity, routing, and thread creation before implementing the full AI module.
 
 ```bash
-python -m community_intern run
+(venv) $ python -m community_intern run
 ```

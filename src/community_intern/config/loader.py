@@ -1,22 +1,13 @@
 from __future__ import annotations
 
-import copy
 import os
 from pathlib import Path
-from typing import Any, Mapping, MutableMapping, Sequence
+from typing import Any, MutableMapping, Sequence
 
 from community_intern.config.models import (
     AppConfig,
     ConfigLoadRequest,
 )
-
-
-def _deep_merge_dicts(base: MutableMapping[str, Any], override: Mapping[str, Any]) -> None:
-    for k, v in override.items():
-        if isinstance(v, Mapping) and isinstance(base.get(k), Mapping):
-            _deep_merge_dicts(base[k], v)  # type: ignore[index]
-            continue
-        base[k] = v
 
 
 def _read_yaml_config(path: Path) -> dict[str, Any]:
@@ -86,28 +77,18 @@ def _apply_env_overrides(config: MutableMapping[str, Any], env_prefix: str) -> N
 
         if leaf not in parent:
             raise KeyError(f"Unknown configuration key path: {dotted}")
-        existing = parent[leaf]
-        if not isinstance(existing, str):
-            raise TypeError(
-                f"Environment variable overrides are only allowed for string values. "
-                f"Key '{dotted}' is {type(existing).__name__}."
-            )
+
+        # We allow overriding any value; Pydantic will handle type coercion/validation later.
         parent[leaf] = value
 
 
 class YamlConfigLoader:
     async def load(self, request: ConfigLoadRequest = ConfigLoadRequest()) -> AppConfig:
-        config: dict[str, Any] = copy.deepcopy(AppConfig().model_dump(mode="python"))
-
         yaml_path = Path(request.yaml_path)
-        yaml_config = _read_yaml_config(yaml_path)
-        _deep_merge_dicts(config, yaml_config)
+        config = _read_yaml_config(yaml_path)
 
         if request.dotenv_path is not None:
             _load_dotenv_if_present(Path(request.dotenv_path))
 
         _apply_env_overrides(config, request.env_prefix)
         return AppConfig.model_validate(config)
-
-
-

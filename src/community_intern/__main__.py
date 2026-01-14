@@ -5,7 +5,7 @@ import asyncio
 import logging
 
 from community_intern.adapters.discord import DiscordBotAdapter
-from community_intern.ai import MockAIClient
+from community_intern.ai import MockAIClient, AIClientImpl
 from community_intern.config import YamlConfigLoader
 from community_intern.config.models import ConfigLoadRequest
 from community_intern.kb.impl import FileSystemKnowledgeBase
@@ -88,8 +88,7 @@ async def _init_kb(args: argparse.Namespace) -> None:
     init_logging(config.logging)
     logger.info("app.starting_kb_init")
 
-    # Using MockAIClient for now as real one isn't integrated yet
-    ai_client = MockAIClient()
+    ai_client = AIClientImpl(config=config.ai)
     kb = FileSystemKnowledgeBase(config=config.kb, ai_client=ai_client)
 
     await kb.build_index()
@@ -115,6 +114,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
-
-

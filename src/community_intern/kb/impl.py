@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-import re
 from pathlib import Path
 from typing import Sequence, Set
 
@@ -17,7 +16,6 @@ class FileSystemKnowledgeBase:
     def __init__(self, config: KnowledgeBaseSettings, ai_client: AIClient):
         self.config = config
         self.ai_client = ai_client
-        self._url_pattern = re.compile(r'https?://(?:[-\w.]|(?:%[\da-fA-F]{2}))+[^\s]*')
 
     async def load_index_text(self) -> str:
         """Load the startup-produced index artifact as plain text."""
@@ -56,17 +54,25 @@ class FileSystemKnowledgeBase:
         file_sources: Set[Path] = set()
         url_sources: Set[str] = set()
 
+        # Load URLs from links file
+        links_file = Path(self.config.links_file_path)
+        if links_file.exists():
+            try:
+                content = links_file.read_text(encoding="utf-8")
+                for line in content.splitlines():
+                    url = line.strip()
+                    if url and not url.startswith("#"):
+                        url_sources.add(url)
+                logger.info("kb.links_file_loaded path=%s count=%d", links_file, len(url_sources))
+            except Exception as e:
+                logger.warning("kb.links_file_read_error path=%s error=%s", links_file, e)
+
         for file_path in sources_dir.rglob("*"):
             if file_path.is_file() and not file_path.name.startswith("."):
                 try:
-                    text = file_path.read_text(encoding="utf-8")
+                    # Just verify it's readable text
+                    file_path.read_text(encoding="utf-8")
                     file_sources.add(file_path)
-                    # Extract URLs
-                    found_urls = self._url_pattern.findall(text)
-                    for url in found_urls:
-                        # Simple cleanup of trailing punctuation
-                        url = url.rstrip('.,;)"\'')
-                        url_sources.add(url)
                 except UnicodeDecodeError:
                     logger.warning("kb.file_decode_error path=%s", file_path)
                     continue
@@ -151,6 +157,3 @@ class FileSystemKnowledgeBase:
             logger.warning("kb.load_file_error path=%s error=%s", file_path, e)
 
         return SourceContent(source_id=source_id, text="")
-
-
-

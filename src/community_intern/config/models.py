@@ -11,7 +11,7 @@ from community_intern.ai.interfaces import AIConfig
 class AppSettings(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    dry_run: bool = False
+    dry_run: bool
 
 
 class FileRotationSettings(BaseModel):
@@ -23,43 +23,44 @@ class FileRotationSettings(BaseModel):
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    backup_count: int = 5
+    backup_count: int
 
 
 class FileLoggingSettings(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    path: str = "data/logs/community-intern.log"
-    rotation: FileRotationSettings = Field(default_factory=FileRotationSettings)
+    path: str
+    rotation: FileRotationSettings
 
 
 class LoggingSettings(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    level: str = "INFO"
-    file: FileLoggingSettings = Field(default_factory=FileLoggingSettings)
+    level: str
+    file: FileLoggingSettings
 
 
 class DiscordSettings(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    token: str = "REPLACE_ME"
-    ai_timeout_seconds: float = 30
+    token: str
+    ai_timeout_seconds: float
 
 
 class KnowledgeBaseSettings(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    sources_dir: str = "data/knowledge-base/sources"
-    index_path: str = "data/knowledge-base/index.txt"
+    sources_dir: str
+    index_path: str
+    links_file_path: str
 
-    web_fetch_timeout_seconds: float = 10
-    web_fetch_cache_dir: str = "data/knowledge-base/web-cache"
+    web_fetch_timeout_seconds: float
+    web_fetch_cache_dir: str
 
-    max_source_bytes: int = 2_000_000
-    max_snippet_chars: int = 1200
-    max_snippets_per_query: int = 10
-    max_sources_per_query: int = 6
+    max_source_bytes: int
+    max_snippet_chars: int
+    max_snippets_per_query: int
+    max_sources_per_query: int
 
 
 class AppConfig(BaseModel):
@@ -72,11 +73,11 @@ class AppConfig(BaseModel):
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    app: AppSettings = Field(default_factory=AppSettings)
-    logging: LoggingSettings = Field(default_factory=LoggingSettings)
-    discord: DiscordSettings = Field(default_factory=DiscordSettings)
-    ai: AIConfig = Field(default_factory=AIConfig)
-    kb: KnowledgeBaseSettings = Field(default_factory=KnowledgeBaseSettings)
+    app: AppSettings
+    logging: LoggingSettings
+    discord: DiscordSettings
+    ai: AIConfig
+    kb: KnowledgeBaseSettings
 
 
 @dataclass(frozen=True, slots=True)
@@ -90,6 +91,3 @@ class ConfigLoadRequest:
     yaml_path: str = "data/config/config.yaml"
     env_prefix: str = "APP__"
     dotenv_path: Optional[str] = ".env"
-
-
-
