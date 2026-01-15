@@ -45,6 +45,7 @@ class DiscordSettings(BaseModel):
 
     token: str
     ai_timeout_seconds: float
+    message_batch_wait_seconds: float
 
 
 class KnowledgeBaseSettings(BaseModel):

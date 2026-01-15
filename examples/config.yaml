@@ -11,6 +11,7 @@ logging:
 discord:
   token: "REPLACE_ME"
   ai_timeout_seconds: 30
+  message_batch_wait_seconds: 60
 
 ai:
   llm_base_url: "https://bridge.crynux-as.xyz/v1/llm"
@@ -57,6 +58,7 @@ ai:
     Do not reply to general chit-chat, unrelated technical support, other projects, or personal requests.
 
     Output format requirements:
+    Do not output the reasoning process.
     Return ONLY a valid JSON object with exactly these keys:
     - should_reply: boolean
     Do not wrap the JSON in markdown code fences.
@@ -79,6 +81,7 @@ ai:
     - If you are not sure, select fewer sources rather than guessing.
 
     Output format requirements:
+    Do not output the reasoning process.
     Return ONLY a valid JSON object with exactly this key:
     - selected_source_ids: array of strings
     Do not wrap the JSON in markdown code fences.
@@ -88,8 +91,11 @@ ai:
   summarization_prompt: |
     Summarize the provided text for a knowledge base index.
     The summary must be short, plain English, and focused on what the source covers and when it is relevant.
+
+    Output format requirements:
     Do not output intermediate steps such as thoughts; only provide the final answer.
     Do not add any preamble or markdown formatting.
+    Do not output the reasoning process.
 
   answer_prompt: |
     You are the community manager for the Crynux Network Discord server.
@@ -97,6 +103,7 @@ ai:
     Keep the answer concise and practical.
 
     Output format requirements:
+    Do not output the reasoning process.
     Return ONLY a valid JSON object with exactly this key:
     - answer: string
     Do not wrap the JSON in markdown code fences.
@@ -109,6 +116,7 @@ ai:
     Reject answers that contain unsupported claims or are not grounded in the provided context.
 
     Output format requirements:
+    Do not output the reasoning process.
     Return ONLY a valid JSON object with exactly this key:
     - is_good_enough: boolean
     Do not wrap the JSON in markdown code fences.

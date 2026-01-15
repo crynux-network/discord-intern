@@ -1,6 +1,7 @@
 services:
   community-intern:
     image: ghcr.io/crynux-network/community-intern:latest
+    restart: unless-stopped
     volumes:
       - ./build/data:/app/data
     command: ["python", "-m", "community_intern", "run"]
