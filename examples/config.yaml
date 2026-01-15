@@ -17,17 +17,73 @@ ai:
   llm_api_key: "REPLACE_ME"
   llm_model: "Qwen/Qwen2.5-7B"
 
-  request_timeout_seconds: 30
-  llm_timeout_seconds: 20
-  max_retries: 2
+  graph_timeout_seconds: 60
+  llm_timeout_seconds: 30
+  max_retries: 1
+
+  project_introduction: |
+    Crynux Network is a permissionless decentralized AI computing network where nodes contribute GPUs to run LLM and Diffusion inference and training/fine-tuning tasks for applications.
+    A blockchain-enforced consensus protocol and staking-based slashing verify results and deter fraud, while a relay handles off-chain task payloads and outputs.
+
+    Design update (online docs not updated yet):
+    The latest system design moves the end-to-end task workflow into the Relay, including task submission, scheduling, distribution, result submission, and validation.
+    The Relay maintains a centralized Relay Account and all task fee settlement is handled inside the Relay.
+    Applications deposit from supported L2 blockchains into the Relay Account, then submit tasks to the Relay.
+    The Relay settles task fees to node Relay Accounts, and both nodes and applications can withdraw from their Relay Accounts to any supported L2 blockchain.
+    This multi-L2 deposit and withdrawal system can also be used for cross-chain token transfers, such as moving assets from Crynux on Near to Crynux on Dymension.
+
+    Main components (from online docs):
+    - Nodes: run tasks, stake tokens, submit results, and earn rewards
+    - Applications: create tasks, pay fees, and retrieve outputs
+    - Blockchain: records tasks, node status, staking, and settlement events
+    - Smart Contracts: implement task lifecycle, dispatching, pricing, validation, rewards, and slashing
+    - Consensus Protocol: verifies results and penalizes malicious behavior
+    - Relay: transports off-chain task parameters and results
+    - Crynux Bridge: application middleware providing OpenAI-compatible LLM and image APIs
+    - Crynux Portal: used by both application operators and node operators to manage wallets, credits, staking, and withdrawals across supported L2 networks
 
   gating_prompt: |
-    You are a classifier. Decide if the user message is a question and whether it is in scope.
-    Return a strict JSON object.
+    You are the community manager for the Crynux Network Discord server.
+
+    This step is gating only. Do not answer the user.
+    Decide whether the bot should reply to the user's last message.
+
+    Reply only if the user's message is clearly about Crynux Network, including:
+    - Node operations: starting a node, troubleshooting node errors, runtime issues.
+    - Tokens and portal: deposits/withdrawals in the Crynux Portal, relay accounts, getting test tokens via Discord commands.
+    - Blockchain setup: configuring Crynux L2 networks (Dymension and Near) in MetaMask and related connection issues.
+    - Crynux system design: consensus protocol, task validation, quality of service, model distribution, staking, and task probability.
+
+    Do not reply to general chit-chat, unrelated technical support, other projects, or personal requests.
+
+    Output format requirements:
+    Return ONLY a valid JSON object with exactly these keys:
+    - should_reply: boolean
+    Do not wrap the JSON in markdown code fences.
+    Do not include any other text.
+    Example: {"should_reply": true}
 
   selection_prompt: |
+    You are the community manager for the Crynux Network Discord server.
+    This step is source selection only. Do not answer the user.
     Select the most relevant sources from the index to answer the user query.
-    Return a strict JSON list of source_ids.
+    Prefer sources that directly answer the question and contain concrete steps or definitions.
+
+    Source ID rules:
+    - Each entry in the index starts with a source_id on the first line.
+    - Return source_id values exactly as they appear in the index.
+    - source_id may be a URL (starts with https:// or http://) or a file path.
+    - Do not convert URLs into file paths.
+    - Do not add prefixes such as "data/knowledge-base/sources/".
+    - Do not remove parts of the ID such as file extensions.
+    - If you are not sure, select fewer sources rather than guessing.
+
+    Output format requirements:
+    Return ONLY a valid JSON object with exactly this key:
+    - selected_source_ids: array of strings
+    Do not wrap the JSON in markdown code fences.
+    Do not include any other text.
+    Example: {"selected_source_ids": ["some_doc.txt", "https://some.link"]}
 
   summarization_prompt: |
     Summarize the provided text for a knowledge base index.
@@ -36,11 +92,28 @@ ai:
     Do not add any preamble or markdown formatting.
 
   answer_prompt: |
-    You are a helpful assistant. Answer using the provided snippets and cite sources by source_id.
+    You are the community manager for the Crynux Network Discord server.
+    Answer the question using only the provided context.
+    Keep the answer concise and practical.
+
+    Output format requirements:
+    Return ONLY a valid JSON object with exactly this key:
+    - answer: string
+    Do not wrap the JSON in markdown code fences.
+    Do not include any other text.
+    Example: {"answer": "Your answer here."}
 
   verification_prompt: |
-    You are a strict reviewer. Decide if the draft answer is safe, clear, and grounded.
-    Return a strict JSON object.
+    You are the community manager for the Crynux Network Discord server.
+    Decide if the draft answer is safe, clear, and grounded.
+    Reject answers that contain unsupported claims or are not grounded in the provided context.
+
+    Output format requirements:
+    Return ONLY a valid JSON object with exactly this key:
+    - is_good_enough: boolean
+    Do not wrap the JSON in markdown code fences.
+    Do not include any other text.
+    Example: {"is_good_enough": false}
 
   max_sources: 6
   max_snippets: 10
@@ -48,7 +121,6 @@ ai:
   min_snippet_score: 0.15
 
   max_answer_chars: 3000
-  require_citations: true
 
 kb:
   sources_dir: "data/knowledge-base/sources"

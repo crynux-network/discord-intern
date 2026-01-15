@@ -13,6 +13,8 @@ authors = [{ name = "lukew" }]
 dependencies = [
   "discord.py==2.6.4",
   "langgraph==1.0.5",
+  "langchain-openai==1.1.7",
+  "langchain-core==1.2.7",
   "pydantic==2.12.5",
   "PyYAML==6.0.2",
   "python-dotenv==1.0.1",

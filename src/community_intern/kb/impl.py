@@ -17,6 +17,20 @@ class FileSystemKnowledgeBase:
         self.config = config
         self.ai_client = ai_client
 
+    def _normalize_file_source_id(self, *, source_id: str, sources_dir: Path) -> str:
+        """
+        Normalize file source IDs to be relative to sources_dir.
+
+        The KB index stores file source IDs as paths relative to sources_dir.
+        The LLM may sometimes return a path that includes the sources_dir prefix.
+        """
+        raw = source_id.strip()
+        normalized = raw.replace("\\", "/").lstrip("/")
+        sources_dir_norm = sources_dir.as_posix().rstrip("/")
+        if sources_dir_norm and normalized.startswith(sources_dir_norm + "/"):
+            normalized = normalized[len(sources_dir_norm) + 1 :]
+        return normalized
+
     async def load_index_text(self) -> str:
         """Load the startup-produced index artifact as plain text."""
         index_path = Path(self.config.index_path)
@@ -98,7 +112,6 @@ class FileSystemKnowledgeBase:
                 summary = await self.ai_client.summarize_for_kb_index(
                     source_id=rel_path,
                     text=text,
-                    timeout_seconds=30.0 # Using a default timeout, ideally from config
                 )
                 entries.append(f"{rel_path}\n{summary}")
             except Exception as e:
@@ -120,7 +133,6 @@ class FileSystemKnowledgeBase:
                     summary = await self.ai_client.summarize_for_kb_index(
                         source_id=url,
                         text=text,
-                        timeout_seconds=30.0
                     )
                     entries.append(f"{url}\n{summary}")
                 except Exception as e:
@@ -145,15 +157,41 @@ class FileSystemKnowledgeBase:
              # Note: For single fetch, this will start/stop browser if not cached, which is heavy but safe.
              async with WebFetcher(self.config) as fetcher:
                  text = await fetcher.fetch(source_id)
+                 if not text.strip():
+                     raise RuntimeError(f"Failed to load URL source content: {source_id}")
                  return SourceContent(source_id=source_id, text=text)
 
-        # Assume file path relative to sources_dir
-        file_path = sources_dir / source_id
         try:
-            if file_path.exists() and file_path.is_file():
-                 text = file_path.read_text(encoding="utf-8")
-                 return SourceContent(source_id=source_id, text=text)
-        except Exception as e:
-            logger.warning("kb.load_file_error path=%s error=%s", file_path, e)
+            raw_path = Path(source_id.strip())
+            sources_dir_resolved = sources_dir.resolve()
 
-        return SourceContent(source_id=source_id, text="")
+            if raw_path.is_absolute():
+                resolved = raw_path.resolve()
+                try:
+                    rel = resolved.relative_to(sources_dir_resolved)
+                except ValueError:
+                    logger.warning(
+                        "kb.load_file_outside_sources_dir source_id=%s path=%s sources_dir=%s",
+                        source_id,
+                        resolved,
+                        sources_dir_resolved,
+                    )
+                    raise ValueError(f"File source is outside sources_dir: {source_id}")
+                file_path = sources_dir_resolved / rel
+            else:
+                normalized_id = self._normalize_file_source_id(source_id=source_id, sources_dir=sources_dir)
+                file_path = sources_dir / Path(normalized_id)
+
+            if not file_path.exists() or not file_path.is_file():
+                raise FileNotFoundError(f"KB file source not found: {source_id}")
+
+            text = file_path.read_text(encoding="utf-8")
+            if not text.strip():
+                raise ValueError(f"KB file source is empty: {source_id}")
+            return SourceContent(source_id=source_id, text=text)
+        except UnicodeDecodeError as e:
+            logger.warning("kb.load_file_decode_error source_id=%s error=%s", source_id, e)
+            raise
+        except OSError as e:
+            logger.warning("kb.load_file_os_error source_id=%s error=%s", source_id, e)
+            raise

@@ -2,126 +2,71 @@
 
 ## Purpose
 
-The AI Response module receives a platform-neutral `Conversation` and `RequestContext`, decides whether to respond, sends the Knowledge Base index to the LLM to choose relevant sources, loads the chosen source content, uses that knowledge as context to generate an answer with citations, and runs a lightweight verification step to ensure the result is safe and clear to post publicly.
-
-This module is **stateless**: it does not store chat history. All conversational context is provided per request by the adapter.
+The AI Response module is responsible for all LLM-based operations in the bot. Its primary purpose is to generate safe answers to user questions using a Knowledge Base. It also provides auxiliary services like text summarization to support Knowledge Base indexing.
 
 ## Responsibilities
 
-- Accept `Conversation` and `RequestContext` from adapters.
-- Use an LLM call with a gating prompt to decide whether the question is answerable.
-- If the question is answerable, ask the LLM to select which sources to load using the Knowledge Base index text.
-- If no suitable sources are found, return `should_reply=false`.
-- Load full content for the selected identifiers from the Knowledge Base.
-- Use the selected source content as context for the LLM to generate an answer with citations.
-- Verify answer quality with a separate LLM verification call and return `should_reply=true` only when verification approves the draft.
-- Return a strict `AIResult` schema for adapters.
+- **Answer Generation**: Orchestrate a multi-step workflow to decide if a question is answerable, select sources, load content, generate an answer, and verify it.
+- **Text Summarization**: Generate concise summaries of source documents for the Knowledge Base index.
+- **Safety & Verification**: Ensure answers are grounded in provided sources and safe to post.
+- **Resource Management**: Efficiently manage LLM API calls and graph execution state.
 
-## External dependencies
+## Public Interfaces
 
-- `langgraph` target 1.0.5 for orchestration
-- LLM provider clients kept behind `LLMClient`
-- Knowledge Base module interface
+The `AIClient` exposes two distinct interfaces, each with a different implementation strategy tailored to its complexity.
 
-## Public interface
+### 1. Generate Reply (`generate_reply`)
 
-See `src/community_intern/ai/interfaces.py` `AIClient`.
+This is the main entry point for the bot's conversational capabilities.
 
-The adapter treats the AI module as a single async call:
+- **Input**: `Conversation`, `RequestContext`
+- **Output**: `AIResult` (contains `should_reply`, `reply_text`)
+- **Implementation**: **Graph-based Orchestration**.
+  - Uses a `LangGraph` workflow to handle the complex logic of gating, retrieval, generation, and verification.
+  - **Stateless**: The workflow is request-scoped and does not persist conversation history.
+  - Supports retries, conditional branching, and structured outputs at each step.
 
-- If `AIResult.should_reply` is `false`, the adapter does nothing.
-- If `true`, the adapter posts `reply_text` in a thread.
+### 2. Summarize for Index (`summarize_for_kb_index`)
 
-## Auxiliary interface: text summarization
+This is a utility method used by the Knowledge Base module when building its index.
 
-The Knowledge Base module needs to create a small startup index. Index generation MUST use an LLM to produce short human-readable descriptions for source selection.
+- **Input**: `source_id`, `text`
+- **Output**: `str` (summary)
+- **Implementation**: **Direct LLM Call**.
+  - Uses a raw, stateless HTTP call to the LLM provider.
+  - Avoids the overhead of the graph for a simple, single-step transformation task.
 
-To avoid coupling index generation to the full `generate_reply` workflow, the AI module MUST expose a dedicated text summarization method.
+## Implementation Architecture
 
-See `src/community_intern/ai/interfaces.py` `AIClient.summarize_for_kb_index`.
+### Graph-based Orchestration (For `generate_reply`)
 
-### Contract
+The complex "Generate Reply" workflow is modeled as a Directed Acyclic Graph (DAG) using `langgraph`.
 
-Method:
+#### Retrieval Strategy
 
-- `summarize_for_kb_index` takes `source_id`, `text`, and `timeout_seconds` and returns `str`
+The system does not use a traditional RAG pipeline where the user query is embedded and used to perform semantic search over the knowledge base.
 
-Requirements:
+Instead, retrieval is a two-stage, index-driven workflow:
 
-- Output MUST be plain English text suitable for inclusion in the KB index artifact.
-- Output MUST be short and focused on what the source covers and when it is relevant.
-- On failure, the summarization call MUST raise an error to the caller.
+1. The Knowledge Base provides a plain-text index where each entry contains a `source_id` and a short description of the source.
+2. The LLM reads this index and selects the most relevant `source_id` values for the user question.
+3. The system loads the full content for those selected sources and passes them as context to the answer-generation step.
 
-## Shared data models
+This design makes the retrieval decision explicit and reviewable, and it avoids brittle query-to-embedding behavior for short or ambiguous questions.
 
-These are the same models used by the adapter design doc.
+Source ID rules:
+- For file sources, `source_id` is a path relative to `kb.sources_dir`.
+- For web sources, `source_id` is the URL.
 
-See `src/community_intern/core/models.py`.
+#### High-level Node Graph
 
-## Configuration
+Nodes represent distinct processing steps:
 
-The AI module is configured under the `ai` section in `config.yaml`.
-
-### Keys
-
-- `ai.llm_base_url`: Base URL for the LLM API.
-- `ai.llm_api_key`: API key for the LLM.
-- `ai.llm_model`: Model name to use (e.g. gpt-4o).
-
-- `ai.request_timeout_seconds`: End-to-end timeout for `generate_reply`.
-- `ai.llm_timeout_seconds`: Per LLM call timeout.
-- `ai.max_retries`: Maximum retry attempts for transient provider failures.
-
-- `ai.gating_prompt`: Prompt for the question gating decision.
-- `ai.selection_prompt`: Prompt for source selection using the KB index text.
-- `ai.summarization_prompt`: Prompt for Knowledge Base index summarization.
-- `ai.answer_prompt`: Prompt for answer generation.
-- `ai.verification_prompt`: Prompt for answer verification.
-
-- `ai.max_sources`: Maximum number of selected sources to load per request.
-
-- `ai.max_answer_chars`: Maximum characters in the returned answer.
-- `ai.require_citations`: If true, return `should_reply=false` when no citations can be produced.
-
-## Orchestration
-
-### Requirements
-
-#### Orchestration
-
-- The workflow MUST be modeled as a small LangGraph state graph with explicit nodes for gating, source selection, content loading, answer generation, and verification.
-- The graph MUST have clear edges and conditional flow so the control flow is auditable and testable.
-
-#### State
-
-- Graph state MUST be defined as a `TypedDict`.
-- State MUST remain minimal and typed. Nodes MUST pass only what the next node needs and avoid storing large raw source text in state.
-
-#### Structured decisions
-
-- Nodes that decide gating, source selection, or verification MUST return strict, typed data.
-- Decision schemas MUST be stable for logging and tests.
-
-#### No persistent memory
-
-- The graph MUST be compiled with checkpointing explicitly disabled.
-- Durable execution, checkpointers, or any other persistent memory MUST NOT be used.
-
-#### Async execution
-
-- Node functions MUST be async.
-- Provider calls MUST use async clients for network I/O.
-- Provider calls MUST use bounded retries and clear timeout policies.
-
-### High-level node graph
-
-Nodes:
-
-1. Question gating
-2. Source selection using KB index text
-3. Load selected source content from Knowledge Base
-4. Answer generation
-5. Answer verification
+1.  **Question Gating**: Decides if the input is a question and if it is answerable.
+2.  **Source Selection**: Uses the KB index to pick relevant files.
+3.  **Content Loading**: Fetches full text for selected files.
+4.  **Answer Generation**: Synthesizes an answer.
+5.  **Answer Verification**: Checks the answer for quality and safety.
 
 ```mermaid
 flowchart LR
@@ -136,172 +81,113 @@ flowchart LR
   Ver -->|rejected| OutNo
 ```
 
-### Typed graph state
+#### Graph Reuse and Concurrency
 
-Keep state minimal and typed. Do not store full documents; store only what the next node needs.
+The Graph structure is the high-level container for the workflow logic.
 
-See `src/community_intern/ai/types.py`.
+- **Write Once, Run Many**: The `StateGraph` is defined and compiled into a `CompiledStateGraph` (Runnable) **once** at application startup.
+- **Thread-Safety**: The compiled graph is immutable and thread-safe. A single instance handles all concurrent requests.
+- **Stateless Execution**: While the graph *manages* state during a single request, it does not persist it. Each request starts with a fresh state. Checkpointing is explicitly disabled.
 
-### Statelessness enforcement
+#### Detailed Node Designs
 
-- The AI module MUST NOT use durable LangGraph checkpointers.
-- The graph MUST be compiled with checkpointing disabled.
-- The AI module MUST NOT persist conversation history.
+##### Node 1: Question gating
+- **Goal**: Decide whether the input is answerable.
+- **Inputs**: Conversation history, `gating_prompt`.
+- **Output**: `should_reply`.
+- **Behavior**: Fast fail if the user input is chit-chat or off-topic.
 
-## Node designs
+##### Node 2: Source selection
+- **Goal**: Select relevant file paths from the KB index.
+- **Inputs**: User question, `kb_index_text`, `selection_prompt`.
+- **Output**: List of `selected_source_ids`.
+- **Behavior**: The LLM analyzes the index (which contains file summaries) to pick the best matches.
 
-### Node 1: Question gating
+##### Node 3: Load selected source content
+- **Goal**: Retrieve full text for the chosen IDs.
+- **Inputs**: `selected_source_ids`.
+- **Output**: List of `{source_id, text}`.
+- **Behavior**: Calls the Knowledge Base module. If loading fails for all sources, the flow stops.
 
-**Goal**: decide whether the input is answerable.
+##### Node 4: Answer generation
+- **Goal**: Produce a concise answer.
+- **Inputs**: User question, loaded source text, `answer_prompt`.
+- **Output**: `draft_answer`.
+- **Constraints**: Must use only provided context. Must not hallucinate.
 
-Inputs:
-- `conversation` use most recent user message as the primary question
-- `config.gating_prompt`
+##### Node 5: Answer verification
+- **Goal**: Final safety check.
+- **Inputs**: Draft answer, source context, `verification_prompt`.
+- **Output**: `verification` (boolean).
+- **Behavior**: Acts as a "supervisor" to reject low-quality or unsafe answers.
 
-Output:
-- `is_question: bool`
-- `is_answerable: bool`
-- `rewrite_query: str | None`
-- `reason: str` for logging and debugging only
+## Link inclusion
 
-Behavior:
-- If not answerable, end early with `should_reply=false`.
+When the selected sources include URL identifiers, the final reply text includes a short "Links" section with those URLs. This makes it easier for users to jump directly to the primary references without requiring citation formatting in the answer text.
 
-### Node 2: Source selection via Knowledge Base index text
+### Direct LLM Interaction (For `summarize_for_kb_index`)
 
-**Goal**: select which file paths and URLs to load as context.
+The summarization task is implemented differently for efficiency.
 
-Inputs:
-- `query`
-- `kb_index_text`
-- `config.selection_prompt`
+- **Direct HTTP**: Uses `aiohttp` to call the LLM API directly.
+- **No Graph Overhead**: Bypasses LangGraph state management.
+- **Simple Prompting**: Uses a single prompt to compress text into a summary.
 
-Output:
-- `selected_source_ids`
+## LLM Integration
 
-Behavior:
-- Send `kb_index_text` and the query to the LLM.
-- The LLM returns a list of identifiers from the index.
-- Truncate deterministically to `ai.max_sources`.
-- If `selected_source_ids` is empty, return `should_reply=false`.
+The module interacts with the LLM in two ways, depending on the complexity of the task:
 
-### Node 3: Load selected source content
+1.  **Via LangChain (used in `generate_reply`)**:
+    - **Context**: Used within the **LangGraph workflow** for complex, multi-step orchestration (Gating, Selection, Generation, Verification).
+    - **Mechanism**: Uses `langchain-openai` (`ChatOpenAI`) as the standard client. A single `ChatOpenAI` instance is created at startup and injected into the graph nodes.
 
-**Goal**: load full content for the selected identifiers.
+2.  **Via Direct HTTP (used in `summarize_for_kb_index`)**:
+    - **Context**: Used by the **Knowledge Base indexer** for simple, single-shot text processing.
+    - **Mechanism**: Uses `aiohttp` for raw, lightweight HTTP POST requests, bypassing LangChain to reduce overhead.
 
-Inputs:
+## Shared Data Models
 
-- `selected_source_ids`
-- `config` content loading policy
+See `src/community_intern/core/models.py`. The module relies on:
+- `Conversation`: Platform-agnostic chat history.
+- `AIResult`: The standardized output contract.
 
-Output:
+## Configuration
 
-- `selected_sources` as a list of `{source_id, text}`
+The AI module is configured under the `ai` section in `config.yaml`.
 
-Behavior:
+### Shared Keys (Connection & Resilience)
+- `llm_base_url`: Base URL for the LLM API.
+- `llm_api_key`: API key for the LLM.
+- `llm_model`: Model name to use.
+- `llm_timeout_seconds`: Timeout per individual LLM call (network timeout).
+- `max_retries`: Maximum retry attempts for transient failures.
 
-- For each selected identifier, call the Knowledge Base loader and collect the returned text.
-- If a selected identifier fails to load, log it and continue, unless no content can be loaded at all.
+### Graph-Specific Keys (`generate_reply`)
+- **Workflow Timeout**: `graph_timeout_seconds` (End-to-end timeout for the entire graph execution).
+- **Project Introduction**: `project_introduction` (shared domain introduction appended to multiple prompt steps).
+- **Prompts**: `gating_prompt`, `selection_prompt`, `answer_prompt`, `verification_prompt`.
+- **Limits**: `max_sources`, `max_answer_chars`.
 
-### Node 4: Answer generation
+### Direct Call Keys (`summarize_for_kb_index`)
+- **Prompts**: `summarization_prompt`.
+- **Behavior**: Uses shared `llm_timeout_seconds` and `max_retries` for the HTTP request.
 
-**Goal**: produce an answer with citations.
+## Error Handling
 
-This step uses the LLM to generate the answer.
+- **Timeouts**: Strict timeouts apply to the overall request and individual LLM calls.
+- **Fail-Safe**: If any step in the graph fails (e.g., API error, validation error), the module returns `should_reply=false` rather than crashing.
+- **Logging**: Detailed logs capture the decision path (gating -> selection -> generation) for debugging.
 
-Inputs:
-- `conversation`
-- `user_question`
-- `selected_sources` with source IDs
-- `config.answer_prompt`
+## Prompt Assembly Rules
 
-Output:
-- `draft_answer`
-- `citations`
+The configuration provides task-focused prompt content only. The runtime assembles the final system prompts by appending shared and fixed requirements in code:
 
-Constraints:
-- The answer MUST be concise.
-- The answer MUST NOT exceed `ai.max_answer_chars`.
-- Do not fabricate sources; citations MUST reference selected `source_id`s.
-- If `require_citations=true` and selected source content is empty, return `should_reply=false`.
-
-### Node 5: Answer verification
-
-**Goal**: decide if the draft is safe and clear to post publicly.
-
-Inputs:
-- `draft_answer`
-- `selected_sources` as context
-- `config.verification_prompt`
-
-Output:
-- `is_good_enough: bool`
-- `issues: list[str]`
-- `suggested_fix: str | None`
-
-Behavior:
-- If `is_good_enough=true`, return `should_reply=true` with `reply_text=draft_answer`.
-- Otherwise return `should_reply=false`.
-
-## LLM boundary
-
-Keep provider-specific logic behind a protocol so swapping providers does not change the graph logic.
-
-See `src/community_intern/ai/interfaces.py` `LLMClient`.
-
-## Error handling and timeouts
-
-- Apply a strict end-to-end request timeout `config.request_timeout_seconds` around `generate_reply`.
-- Each LLM call MUST have its own timeout `config.llm_timeout_seconds`.
-- Use bounded retries with jitter for transient provider failures; do not retry on:
-  - invalid request errors
-  - prompt/schema validation errors
-- On any failure that prevents a verified answer, return `should_reply=false`.
+- `project_introduction` is appended to the system prompt for gating, source selection, answer generation, verification, and summarization.
+- Output format requirements for gating, selection, and verification are enforced in code and are not configurable.
 
 ## Observability
 
-Log fields:
-
-- `platform`, `channel_id`, `thread_id`, `message_id`
-- `gate.is_question`, `gate.is_answerable`, `gate.reason`
-- `selection.selected_sources_count`, `loading.loaded_sources_count`
-- `verification.is_good_enough`, `verification.issues_count`
-- Latencies per node and per provider call
-
-Metrics:
-
-- `ai_requests_total{result=answered|skipped|error}`
-- `ai_gate_total{answerable=true|false}`
-- `ai_verification_total{good_enough=true|false}`
-- `ai_selected_sources_histogram`
-
-## Test plan
-
-- Unit tests:
-  - Gating decision parsing and early-exit behavior
-  - Source selection parsing and source selection bounding
-  - Citation integrity, citations only from loaded sources
-  - Verification parsing and skip behavior
-- Contract tests:
-  - `generate_reply` returns a valid `AIResult` for representative inputs
-  - Timeouts cause `should_reply=false` and do not raise to adapter
-
-## Config-driven prompting
-
-Prompts and policies for question gating MUST be stored in configuration so communities can tune what the bot answers without code changes.
-
-Configuration MUST include:
-
-- Answer scope prompt: what topics/questions to answer.
-- Refusal policy: what to ignore vs. provide a safe redirect.
-
-Answer verification is intentionally not configurable; it is a separate LLM evaluation call.
-
-## AIResult shape
-
-The AI module MUST return a single normalized result:
-
-- `should_reply: bool`
-- `reply_text: str | None`
-- `citations: list[Citation]`
-- `debug: dict | None` never post to users
+- **Logs**: Latency, decision outcomes (e.g., `should_reply`), and token usage.
+- **Metrics**:
+  - `ai_requests_total`: Counters for success/skip/error.
+  - `ai_gate_total`: Track how often the bot decides to answer.

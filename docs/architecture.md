@@ -10,13 +10,16 @@ For the AI module, there is no separate "single message" input type: every call 
 
 - **discord.py**: 2.6.4
 - **langgraph**: 1.0.5
+- **langchain-openai**: 1.1.7
+- **langchain-core**: 1.2.7
 
 Primary documentation entry points:
 
 - **discord.py docs**: `https://discordpy.readthedocs.io/en/stable/`
 - **LangGraph docs overview**: `https://docs.langchain.com/oss/python/langgraph/overview`
 - **LangGraph API reference**: `https://reference.langchain.com/python/langgraph/`
-  - Note: The official LangGraph docs are hosted under the LangChain OSS documentation domain; this does not imply the project uses the LangChain library.
+  - Note: The official LangGraph docs are hosted under the LangChain OSS documentation domain.
+- **LangChain OpenAI docs**: `https://python.langchain.com/docs/integrations/chat/openai/`
 
 ## Goals and non-goals
 
@@ -77,6 +80,7 @@ Implementation details for the Bot Integration module live in `docs/module-bot-i
 - Use an LLM call with a configured gating prompt to decide whether a response is needed.
 - If a response is needed, use an LLM call to select relevant sources from the Knowledge Base index, load the selected source content, and use an LLM call to generate the answer.
 - Validate answer quality with a separate LLM verification call and only return answers that are "good enough" to send publicly.
+- When selected sources include URL identifiers, include those URLs in the final reply text to make it easy for users to open the primary references.
 - Return a result in a strict schema to keep integrations simple.
 
 ### Statelessness requirement
@@ -130,6 +134,3 @@ To add a new platform such as Telegram, implement a new integration module that:
 - Converts platform events into the shared `Conversation` model
 - Calls the AI module via the same `generate_reply` boundary
 - Posts responses using the platform’s native reply/thread mechanism
-
-
-

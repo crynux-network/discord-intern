@@ -16,7 +16,6 @@ class AIClient(Protocol):
         *,
         source_id: str,
         text: str,
-        timeout_seconds: float,
     ) -> str:
         """Return a short plain-text description for the Knowledge Base index."""
 
@@ -30,11 +29,12 @@ class AIConfig(BaseModel):
     llm_model: str
 
     # Timeouts and retries
-    request_timeout_seconds: float
+    graph_timeout_seconds: float
     llm_timeout_seconds: float
     max_retries: int
 
     # Prompts and policy
+    project_introduction: str = ""
     gating_prompt: str
     selection_prompt: str
     summarization_prompt: str
@@ -49,4 +49,3 @@ class AIConfig(BaseModel):
 
     # Output policy
     max_answer_chars: int
-    require_citations: bool

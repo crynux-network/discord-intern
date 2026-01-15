@@ -1,0 +1,8 @@
+---
+alwaysApply: false
+---
+LLM prompt guidance:
+
+We use `with_structured_output` when need JSON responses.
+`with_structured_output` provides the schema and output constraints to the model and parses the response.
+Do not add manual output format instructions like "Return only JSON" in the prompt.

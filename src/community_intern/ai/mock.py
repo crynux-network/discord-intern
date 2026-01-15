@@ -22,7 +22,6 @@ class MockAIClient:
         return AIResult(
             should_reply=True,
             reply_text=self.reply_text,
-            citations=(),
             debug={
                 "mock": True,
                 "message_count": len(conversation.messages),
@@ -35,10 +34,6 @@ class MockAIClient:
         *,
         source_id: str,
         text: str,
-        timeout_seconds: float,
     ) -> str:
         """Return a short plain-text description for the Knowledge Base index."""
         return f"Mock summary for {source_id}: {text[:50]}..."
-
-
-

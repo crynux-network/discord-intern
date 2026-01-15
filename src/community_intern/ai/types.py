@@ -1,25 +1,6 @@
 from __future__ import annotations
 
-from typing import Optional, Sequence, TypedDict
-
-
-class Snippet(TypedDict):
-    source_id: str
-    text: str
-    score: float
-
-
-class GateDecision(TypedDict):
-    is_question: bool
-    is_answerable: bool
-    rewrite_query: Optional[str]
-    reason: str
-
-
-class VerificationResult(TypedDict):
-    is_good_enough: bool
-    issues: Sequence[str]
-    suggested_fix: Optional[str]
+from typing import Sequence, TypedDict
 
 
 class GraphState(TypedDict):
@@ -36,20 +17,11 @@ class GraphState(TypedDict):
 
     # Derived
     user_question: str
-    gate: GateDecision
-
-    # Retrieval
-    query: str
-    snippets: Sequence[Snippet]
-    used_sources: Sequence[str]
+    selected_source_ids: Sequence[str]
+    loaded_sources: Sequence[object]
 
     # Generation
     draft_answer: str
-    citations: Sequence[object]
 
     # Verification
-    verification: VerificationResult
-
-
-
-
+    verification: bool

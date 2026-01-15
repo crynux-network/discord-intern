@@ -5,7 +5,7 @@ import asyncio
 import logging
 
 from community_intern.adapters.discord import DiscordBotAdapter
-from community_intern.ai import MockAIClient, AIClientImpl
+from community_intern.ai import AIClientImpl
 from community_intern.config import YamlConfigLoader
 from community_intern.config.models import ConfigLoadRequest
 from community_intern.kb.impl import FileSystemKnowledgeBase
@@ -31,11 +31,6 @@ def _build_parser() -> argparse.ArgumentParser:
 
     # Command: run
     run_parser = subparsers.add_parser("run", help="Start the Discord bot")
-    run_parser.add_argument(
-        "--mock-reply-text",
-        default=None,
-        help="Override the default mock reply text",
-    )
     run_parser.add_argument(
         "--run-seconds",
         type=float,
@@ -72,7 +67,11 @@ async def _run_bot(args: argparse.Namespace) -> None:
     init_logging(config.logging)
     logger.info("app.starting_bot dry_run=%s", config.app.dry_run)
 
-    ai_client = MockAIClient(reply_text=args.mock_reply_text) if args.mock_reply_text else MockAIClient()
+    # Initialize AI and KnowledgeBase with circular dependency injection
+    ai_client = AIClientImpl(config=config.ai)
+    kb = FileSystemKnowledgeBase(config=config.kb, ai_client=ai_client)
+    ai_client.set_kb(kb)
+
     adapter = DiscordBotAdapter(config=config, ai_client=ai_client)
     try:
         if args.run_seconds is not None:
@@ -90,6 +89,9 @@ async def _init_kb(args: argparse.Namespace) -> None:
 
     ai_client = AIClientImpl(config=config.ai)
     kb = FileSystemKnowledgeBase(config=config.kb, ai_client=ai_client)
+    # Note: ai_client.set_kb(kb) is not strictly needed for indexing,
+    # but good for consistency if AIClient needs to read KB during init in future.
+    ai_client.set_kb(kb)
 
     await kb.build_index()
     logger.info("app.kb_init_complete")

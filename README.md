@@ -1,20 +1,21 @@
 # Community Intern
 
-Community Intern is an AI and LLM powered Discord FAQ assistant that monitors selected channels, detects questions, and posts helpful answers in newly created threads to keep the main channel clean.
+Community Intern is an AI and LLM powered Discord FAQ assistant that monitors selected channels, detects questions, and drafts source grounded answers using a managed knowledge base built from local files and online links.
 
 ## What it does
 
 - Watches all readable Discord channels for question-like messages
-- Uses AI to decide whether a message is a question and whether it is in scope to answer (and skips messages that are not)
-- Uses an LLM to draft a helpful answer grounded in the knowledge base (local files and configured web sources) when it decides to respond
-- Creates a thread from the triggering message and replies inside that thread
-- Supports follow-up questions by replying again when a thread continues (using the full thread context)
+- Uses AI to decide whether a message is a question and whether it is in scope to answer, and skips messages that are not
+- Uses an LLM guided retrieval approach instead of embedding based RAG, which is more reliable for short or ambiguous questions
+- Uses an LLM to draft a helpful answer grounded only in the loaded source
+- Creates a thread from the triggering message and replies inside that thread to keep the main channel clean
+- Supports follow up questions by replying again when a thread continues using the full thread context
 
 ## Key features
 
 
 - **AI-generated, source-grounded answers**: An LLM generates answers from your documentation sources and can include citations back to those sources.
-- **Knowledge base from files and links**: Uses a local folder of text sources and can incorporate relevant web pages referenced by links (supports dynamic content loading).
+- **Knowledge base from files and links**: Uses a local folder of text sources and can incorporate relevant web pages referenced by links and supports dynamic content loading.
 - **Bring your own LLM**: Choose which LLM provider and model to use via configuration.
 - **Thread-first replies**: Answers live in message-backed threads rather than cluttering the channel.
 - **Configurable scope**: Communities can tune what kinds of questions are considered answerable without changing code.
@@ -34,7 +35,7 @@ See `docs/` for architecture and module-level documentation, plus configuration 
 - To allow the bot to operate in a specific channel, grant the **Community Intern** role channel permissions:
   - **View Channel**
   - **Read Message History**
-  - **Create Public Threads** (and/or **Create Private Threads**, depending on your usage)
+  - **Create Public Threads**
   - **Send Messages in Threads**
 
 ### 2) Install dependencies
@@ -59,7 +60,20 @@ ai:
   llm_model: "Qwen/Qwen2.5-7B"
 ```
 
-**b) Create `.env` for secrets**
+**Prompt configuration**
+
+The AI module is configured under the `ai` section in `data/config/config.yaml`. The key prompt inputs are:
+
+- `project_introduction`: A shared domain introduction that is appended to multiple prompt steps. Keep it accurate, concise, and written as a stable project specification. This text strongly influences what the bot considers in scope and how it explains concepts.
+- `gating_prompt`: Decides whether the bot should reply at all.
+- `selection_prompt`: Selects the most relevant sources from the knowledge base index.
+- `answer_prompt`: Generates the final answer using only the selected source content.
+- `verification_prompt`: Verifies the draft answer for clarity, safety, and grounding.
+- `summarization_prompt`: Summarizes source text for the knowledge base index.
+
+The runtime enforces output format requirements for gating, selection, and verification in code. Keep your prompts focused on task intent rather than JSON schemas. For full details, see `docs/module-ai-response.md`.
+
+**b. Create `.env` for secrets**
 
 Create a `.env` file in the root directory (same level as `pyproject.toml`) to store sensitive keys.
 
@@ -94,3 +108,26 @@ This project currently ships with a mock AI client that always replies with a fi
 ```bash
 (venv) $ python -m community_intern run
 ```
+
+## LangSmith tracing
+
+LangSmith tracing is supported for the LangGraph based Q&A workflow. The Knowledge Base indexing is not traced.
+
+### 1) Create a LangSmith project and API key
+
+- Create a LangSmith account and project.
+- Create a LangSmith API key.
+
+### 2) Configure environment variables
+
+Add these to your `.env` file:
+
+```bash
+LANGSMITH_TRACING=true
+LANGSMITH_API_KEY=your_langsmith_api_key
+LANGSMITH_PROJECT=community-intern
+```
+
+### 3) Run the bot
+
+Start the bot as usual. Traces should appear in your LangSmith project.

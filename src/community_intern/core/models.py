@@ -31,18 +31,7 @@ class RequestContext:
 
 
 @dataclass(frozen=True, slots=True)
-class Citation:
-    source_id: str
-    quote: Optional[str] = None
-
-
-@dataclass(frozen=True, slots=True)
 class AIResult:
     should_reply: bool
     reply_text: Optional[str]
-    citations: Sequence[Citation] = ()
     debug: Optional[dict] = None
-
-
-
-
