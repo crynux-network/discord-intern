@@ -73,7 +73,7 @@ The AI module is configured under the `ai` section in `data/config/config.yaml`.
 
 The runtime enforces output format requirements for gating, selection, and verification in code. Keep your prompts focused on task intent rather than JSON schemas. For full details, see `docs/module-ai-response.md`.
 
-**b. Create `.env` for secrets**
+**b) Create `.env` for secrets**
 
 Create a `.env` file in the root directory (same level as `pyproject.toml`) to store sensitive keys.
 
@@ -102,8 +102,6 @@ Before running the bot, initialize the knowledge base index. This will scan your
 ```
 
 ### 6) Run the bot
-
-This project currently ships with a mock AI client that always replies with a fixed message. This lets you validate Discord connectivity, routing, and thread creation before implementing the full AI module.
 
 ```bash
 (venv) $ python -m community_intern run
