@@ -40,6 +40,12 @@ The Knowledge Base reads these keys under the `kb` section:
 - `kb.web_fetch_cache_dir`
 - `kb.max_source_bytes`
 
+## Cache and incremental updates
+
+The Knowledge Base uses a persistent cache metadata file to support incremental updates of `index.txt` and to reduce unnecessary AI summarization and URL fetching.
+
+The cache schema and the full incremental update requirements are specified in [`./module-knowledge-base-cache.md`](./module-knowledge-base-cache.md).
+
 ## Index artifact format
 
 The index is intended to be small and fast to read at runtime. It MUST be a **UTF-8 text file**. The AI module may send the full index text to the LLM for source selection, so the format should prioritize readability and stable diffs.
