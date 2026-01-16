@@ -5,17 +5,19 @@ Community Intern is an AI and LLM powered Discord FAQ assistant that monitors se
 ## What it does
 
 - Watches all readable Discord channels for question-like messages
-- Uses AI to decide whether a message is a question and whether it is in scope to answer, and skips messages that are not
-- Uses an LLM guided retrieval approach instead of embedding based RAG, which is more reliable for short or ambiguous questions
-- Uses an LLM to draft a helpful answer grounded only in the loaded source
-- Creates a thread from the triggering message and replies inside that thread to keep the main channel clean
-- Supports follow up questions by replying again when a thread continues using the full thread context
+- Uses an LLM to decide whether a message is answerable and in scope, and skips messages that are not
+- Uses an LLM to select relevant sources from a managed knowledge base built from local files and web links
+- Uses an LLM to draft an answer grounded only in the selected source content
+- Creates a thread from the triggering message and replies inside that thread
+- Supports follow up questions by replying again when a thread continues, using the full thread context
 
 ## Key features
 
-
 - **AI-generated, source-grounded answers**: An LLM generates answers from your documentation sources and can include citations back to those sources.
-- **Knowledge base from files and links**: Uses a local folder of text sources and can incorporate relevant web pages referenced by links and supports dynamic content loading.
+- **Guided retrieval for reliable source selection**: Uses an LLM-guided selection flow (instead of embedding-only RAG) to pick the best sources for short or ambiguous questions.
+- **Knowledge base from files and links**: Uses a local folder of text sources and can incorporate web pages referenced by links, including JavaScript-rendered pages that require a headless browser to fully load before content extraction.
+- **Token-efficient web ingestion**: After fetching web pages, the HTML content is cleaned to keep only key content, reducing LLM token usage during indexing and answering.
+- **Incremental updates and auto-refresh**: Automatically monitors and updates the knowledge base when local files or web sources change. Uses a persistent cache to process only changed content, avoiding redundant LLM summarization and network requests.
 - **Bring your own LLM**: Choose which LLM provider and model to use via configuration.
 - **Thread-first replies**: Answers live in message-backed threads rather than cluttering the channel.
 - **Configurable scope**: Communities can tune what kinds of questions are considered answerable without changing code.
