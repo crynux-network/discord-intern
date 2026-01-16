@@ -17,9 +17,9 @@ ai:
   llm_api_key: "REPLACE_ME"
   llm_model: "Qwen/Qwen2.5-7B-Instruct"
 
-  graph_timeout_seconds: 60
-  llm_timeout_seconds: 30
-  max_retries: 1
+  graph_timeout_seconds: 200
+  llm_timeout_seconds: 60
+  max_retries: 2
 
   enable_verification: false
 
