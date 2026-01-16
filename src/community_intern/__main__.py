@@ -42,9 +42,9 @@ async def _stop_adapter_gracefully(adapter: DiscordBotAdapter, *, timeout_second
     try:
         await asyncio.wait_for(asyncio.shield(adapter.stop()), timeout=timeout_seconds)
     except asyncio.TimeoutError:
-        logger.warning("app.shutdown_timeout timeout_seconds=%s", timeout_seconds)
+        logger.warning("Shutdown timed out while stopping the Discord adapter. timeout_seconds=%s", timeout_seconds)
     except Exception:
-        logger.exception("app.shutdown_error")
+        logger.exception("Unexpected error during shutdown.")
 
 
 async def _load_config(args: argparse.Namespace):
@@ -58,7 +58,7 @@ async def _load_config(args: argparse.Namespace):
 async def _run_bot(args: argparse.Namespace) -> None:
     config = await _load_config(args)
     init_logging(config.logging)
-    logger.info("app.starting_bot dry_run=%s", config.app.dry_run)
+    logger.info("Starting application in bot mode. dry_run=%s", config.app.dry_run)
 
     # Initialize AI and KnowledgeBase with circular dependency injection
     ai_client = AIClientImpl(config=config.ai)
@@ -78,7 +78,7 @@ async def _run_bot(args: argparse.Namespace) -> None:
 async def _init_kb(args: argparse.Namespace) -> None:
     config = await _load_config(args)
     init_logging(config.logging)
-    logger.info("app.starting_kb_init")
+    logger.info("Starting knowledge base indexing.")
 
     ai_client = AIClientImpl(config=config.ai)
     kb = FileSystemKnowledgeBase(config=config.kb, ai_client=ai_client)
@@ -87,7 +87,7 @@ async def _init_kb(args: argparse.Namespace) -> None:
     ai_client.set_kb(kb)
 
     await kb.build_index()
-    logger.info("app.kb_init_complete")
+    logger.info("Knowledge base indexing completed.")
 
 
 async def _main_async() -> None:
@@ -104,7 +104,7 @@ def main() -> None:
     try:
         asyncio.run(_main_async())
     except KeyboardInterrupt:
-        logger.info("app.interrupted_by_user")
+        logger.info("Interrupted by user.")
 
 
 if __name__ == "__main__":

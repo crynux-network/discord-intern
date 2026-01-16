@@ -40,7 +40,7 @@ class _InternBot(commands.Bot):
     async def on_ready(self) -> None:
         user = self.user
         logger.info(
-            "discord.ready user_id=%s user=%s",
+            "Discord bot is ready. user_id=%s user=%s",
             str(user.id) if user is not None else None,
             str(user) if user is not None else None,
         )
@@ -59,17 +59,15 @@ class DiscordBotAdapter(DiscordAdapter):
 
     async def start(self) -> None:
         logger.info(
-            "discord.adapter_starting dry_run=%s ai_timeout_seconds=%s",
+            "Starting Discord adapter. dry_run=%s",
             self._config.app.dry_run,
-            self._config.discord.ai_timeout_seconds,
         )
         await self._bot.start(self._config.discord.token)
 
     async def run_for(self, *, seconds: float, ready_timeout_seconds: float = 30) -> None:
         logger.info(
-            "discord.adapter_starting dry_run=%s ai_timeout_seconds=%s run_for_seconds=%s",
+            "Starting Discord adapter for a limited run. dry_run=%s run_for_seconds=%s",
             self._config.app.dry_run,
-            self._config.discord.ai_timeout_seconds,
             seconds,
         )
 
@@ -85,11 +83,8 @@ class DiscordBotAdapter(DiscordAdapter):
             try:
                 await connect_task
             except asyncio.CancelledError:
-                logger.info("discord.connect_task_cancelled")
+                logger.info("Discord connect task was cancelled.")
 
     async def stop(self) -> None:
         if not self._bot.is_closed():
             await self._bot.close()
-
-
-

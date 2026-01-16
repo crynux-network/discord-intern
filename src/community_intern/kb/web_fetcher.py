@@ -35,8 +35,8 @@ class WebFetcher:
         try:
             self._playwright = await async_playwright().start()
             self._browser = await self._playwright.chromium.launch(headless=True)
-        except Exception as e:
-            logger.error("kb.web_fetcher_start_failed error=%s", e)
+        except Exception:
+            logger.exception("Failed to start web fetcher browser.")
             await self.stop()
             raise
 
@@ -55,7 +55,7 @@ class WebFetcher:
         Returns the inner HTML of the <body> tag.
         Content is cached to disk.
         """
-        logger.debug("kb.fetch_start url=%s", url)
+        logger.debug("Fetching URL content for knowledge base. url=%s", url)
         cache_dir = Path(self.config.web_fetch_cache_dir)
         cache_dir.mkdir(parents=True, exist_ok=True)
 
@@ -64,7 +64,7 @@ class WebFetcher:
         cache_file = cache_dir / url_hash
 
         if cache_file.exists():
-            logger.debug("kb.fetch_cache_hit url=%s", url)
+            logger.debug("Using cached URL content. url=%s", url)
             return cache_file.read_text(encoding="utf-8")
 
         # If browser is not running (e.g. used without context manager), start it temporarily?
@@ -82,27 +82,27 @@ class WebFetcher:
                 # Wait for network idle to ensure dynamic content is loaded
                 # Convert seconds to ms
                 timeout_ms = self.config.web_fetch_timeout_seconds * 1000
-                logger.debug("kb.fetch_navigating url=%s", url)
+                logger.debug("Navigating to URL. url=%s", url)
                 await page.goto(url, wait_until="networkidle", timeout=timeout_ms)
 
                 # Get body content
                 content = await page.inner_html("body")
-                logger.debug("kb.fetch_cleaning url=%s raw_len=%d", url, len(content))
+                logger.debug("Cleaning fetched HTML content. url=%s raw_len=%d", url, len(content))
 
                 # Clean content
                 content = self._clean_content(content)
 
                 # Enforce size limit
                 if len(content.encode("utf-8")) > self.config.max_source_bytes:
-                    logger.warning("kb.fetch_too_large url=%s size=%d", url, len(content))
+                    logger.warning("Fetched content exceeds configured size limit, skipping. url=%s size=%d", url, len(content))
                     return ""
 
                 # Cache it
                 cache_file.write_text(content, encoding="utf-8")
-                logger.debug("kb.fetch_success url=%s size=%d", url, len(content))
+                logger.debug("Fetched and cached URL content. url=%s size=%d", url, len(content))
                 return content
-            except Exception as e:
-                logger.warning("kb.fetch_exception url=%s error=%s", url, e)
+            except Exception:
+                logger.exception("Failed to fetch URL content. url=%s", url)
                 return ""
             finally:
                 await page.close()

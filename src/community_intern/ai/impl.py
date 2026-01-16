@@ -42,7 +42,7 @@ class AIClientImpl(AIClient):
 
     async def generate_reply(self, conversation: Conversation, context: RequestContext) -> AIResult:
         if not self._kb:
-            logger.warning("generate_reply called but KnowledgeBase is not configured")
+            logger.warning("Knowledge base is not configured, skipping AI reply generation.")
             return AIResult(should_reply=False, reply_text=None)
 
         initial_state: GraphState = {
@@ -82,10 +82,10 @@ class AIClientImpl(AIClient):
                 }
             )
         except asyncio.TimeoutError:
-            logger.warning("generate_reply timed out")
+            logger.warning("AI graph timed out while generating a reply.")
             return AIResult(should_reply=False, reply_text=None)
-        except Exception as e:
-            logger.exception("generate_reply failed")
+        except Exception:
+            logger.exception("AI reply generation failed.")
             return AIResult(should_reply=False, reply_text=None)
 
     async def summarize_for_kb_index(
@@ -146,15 +146,29 @@ class AIClientImpl(AIClient):
                             response_text = await resp.text()
                             # Retry on rate limits (429) or server errors (5xx)
                             if resp.status == 429 or 500 <= resp.status < 600:
-                                logger.warning(f"LLM request {source_id} failed: {resp.status}, attempt {attempt + 1}")
+                                logger.warning(
+                                    "LLM summarization request failed and will be retried. source_id=%s status=%s attempt=%s",
+                                    source_id,
+                                    resp.status,
+                                    attempt + 1,
+                                )
                                 last_error = RuntimeError(f"HTTP {resp.status}: {response_text}")
                             else:
                                 # Do not retry on other client errors (400, 401, 403, etc.)
-                                logger.error(f"LLM request {source_id} fatal error: {resp.status} - {response_text}")
+                                logger.error(
+                                    "LLM summarization request failed with a non-retryable status. source_id=%s status=%s",
+                                    source_id,
+                                    resp.status,
+                                )
                                 raise RuntimeError(f"HTTP {resp.status}: {response_text}")
 
                 except (aiohttp.ClientError, asyncio.TimeoutError) as e:
-                    logger.warning(f"LLM request {source_id} network error: {e}, attempt {attempt + 1}")
+                    logger.warning(
+                        "LLM summarization request encountered a network error and will be retried. source_id=%s error=%s attempt=%s",
+                        source_id,
+                        str(e),
+                        attempt + 1,
+                    )
                     last_error = e
 
                 # Exponential backoff if we are going to retry
@@ -167,6 +181,6 @@ class AIClientImpl(AIClient):
 
         try:
             return await _make_request()
-        except Exception as e:
-            logger.error(f"Failed to summarize source {source_id}: {e}")
+        except Exception:
+            logger.exception("Failed to summarize source for knowledge base index. source_id=%s", source_id)
             raise

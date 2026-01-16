@@ -193,3 +193,6 @@ The configuration provides task-focused prompt content only. The runtime assembl
 - **Metrics**:
   - `ai_requests_total`: Counters for success/skip/error.
   - `ai_gate_total`: Track how often the bot decides to answer.
+ - **Batch boundary debug logs**:
+   - `discord.user_batch_wait`: Emitted when the adapter schedules or resets the quiet-window timer after a user message in a channel.
+   - `discord.user_batch_process_start`: Emitted when the adapter starts processing a completed user message batch and is about to call `generate_reply`.

@@ -30,7 +30,6 @@ All configuration is loaded from `config.yaml` with environment-variable overrid
 The adapter reads these keys:
 
 - `discord.token`
-- `discord.ai_timeout_seconds`
 - `discord.message_batch_wait_seconds`
 - `app.dry_run`
 
@@ -210,7 +209,6 @@ sequenceDiagram
 
 ### AI call failures
 
-- Time out the AI request using `discord.ai_timeout_seconds`.
 - On timeout or provider error:
   - Log the failure (with IDs and timing).
   - Do not post an answer.

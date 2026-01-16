@@ -86,7 +86,7 @@ async def _retry_async(
                 break
             delay_seconds = base_delay_seconds * (2 ** (attempt - 1))
             logger.warning(
-                "discord.http_retry operation=%s attempt=%s/%s delay_seconds=%s %s error=%s",
+                "Retrying Discord HTTP request. operation=%s attempt=%s/%s delay_seconds=%s %s error=%s",
                 operation,
                 attempt,
                 attempts,
@@ -129,7 +129,7 @@ class MessageRouterCog(commands.Cog):
 
         bot_user = self._bot.user
         if bot_user is None:
-            logger.warning("discord.bot_user_missing message_id=%s", getattr(message, "id", None))
+            logger.warning("Discord bot user is not available. message_id=%s", getattr(message, "id", None))
             return
         bot_user_id = bot_user.id
 
@@ -173,7 +173,7 @@ class MessageRouterCog(commands.Cog):
             return await message.channel.fetch_message(reference.message_id)
         except discord.NotFound:
             logger.warning(
-                "discord.reference_not_found platform=discord guild_id=%s channel_id=%s message_id=%s reference_id=%s",
+                "Referenced Discord message was not found. platform=discord guild_id=%s channel_id=%s message_id=%s reference_id=%s",
                 str(message.guild.id) if message.guild is not None else None,
                 str(getattr(message.channel, "id", None)),
                 str(message.id),
@@ -182,7 +182,7 @@ class MessageRouterCog(commands.Cog):
             return None
         except discord.DiscordException:
             logger.exception(
-                "discord.reference_fetch_failed platform=discord guild_id=%s channel_id=%s message_id=%s reference_id=%s",
+                "Failed to fetch referenced Discord message. platform=discord guild_id=%s channel_id=%s message_id=%s reference_id=%s",
                 str(message.guild.id) if message.guild is not None else None,
                 str(getattr(message.channel, "id", None)),
                 str(message.id),
@@ -196,13 +196,26 @@ class MessageRouterCog(commands.Cog):
             pending = _PendingUserBatch(messages=[], task=None, generation=0)
             self._pending_user_batches[key] = pending
 
+        prior_count = len(pending.messages)
         pending.messages.append(message)
         pending.generation += 1
         generation = pending.generation
 
+        wait_action = "start" if prior_count == 0 else "reset"
         if pending.task is not None and not pending.task.done():
             pending.task.cancel()
         pending.task = asyncio.create_task(self._flush_user_batch_after_wait(key=key, generation=generation))
+        logger.debug(
+            "Waiting to batch Discord user messages. platform=discord guild_id=%s channel_id=%s author_id=%s message_id=%s batch_size=%s wait_seconds=%s action=%s generation=%s",
+            key[0],
+            key[1],
+            key[2],
+            str(message.id),
+            len(pending.messages),
+            self._settings.message_batch_wait_seconds,
+            wait_action,
+            generation,
+        )
 
     async def _flush_user_batch_after_wait(self, *, key: tuple[str, str, str], generation: int) -> None:
         try:
@@ -221,11 +234,20 @@ class MessageRouterCog(commands.Cog):
             del self._pending_user_batches[key]
             return
 
+        logger.debug(
+            "Starting processing of batched Discord user messages. platform=discord guild_id=%s channel_id=%s author_id=%s batch_size=%s last_message_id=%s generation=%s",
+            key[0],
+            key[1],
+            key[2],
+            len(messages),
+            str(messages[-1].id),
+            generation,
+        )
         del self._pending_user_batches[key]
         try:
             await self._process_channel_batch(messages=messages)
         except Exception:
-            logger.exception("discord.batch_process_failed guild_id=%s channel_id=%s author_id=%s", *key)
+            logger.exception("Failed to process batched Discord messages. guild_id=%s channel_id=%s author_id=%s", *key)
 
     async def _process_channel_batch(self, *, messages: list[discord.Message]) -> None:
         messages = [m for m in messages if (m.content or "").strip()]
@@ -268,22 +290,10 @@ class MessageRouterCog(commands.Cog):
 
         started = time.perf_counter()
         try:
-            result = await asyncio.wait_for(
-                self._ai.generate_reply(conversation=conversation, context=context),
-                timeout=self._settings.ai_timeout_seconds,
-            )
-        except asyncio.TimeoutError:
-            logger.warning(
-                "ai.timeout platform=discord guild_id=%s channel_id=%s message_id=%s timeout_seconds=%s",
-                context.guild_id,
-                context.channel_id,
-                context.message_id,
-                self._settings.ai_timeout_seconds,
-            )
-            return
+            result = await self._ai.generate_reply(conversation=conversation, context=context)
         except Exception:
             logger.exception(
-                "ai.error platform=discord guild_id=%s channel_id=%s message_id=%s",
+                "AI request failed. platform=discord guild_id=%s channel_id=%s message_id=%s",
                 context.guild_id,
                 context.channel_id,
                 context.message_id,
@@ -292,7 +302,7 @@ class MessageRouterCog(commands.Cog):
         finally:
             elapsed_ms = int((time.perf_counter() - started) * 1000)
             logger.info(
-                "ai.call platform=discord routing=channel_message guild_id=%s channel_id=%s message_id=%s latency_ms=%s",
+                "AI request completed. platform=discord routing=channel_message guild_id=%s channel_id=%s message_id=%s latency_ms=%s",
                 context.guild_id,
                 context.channel_id,
                 context.message_id,
@@ -304,7 +314,7 @@ class MessageRouterCog(commands.Cog):
 
         if self._dry_run:
             logger.info(
-                "discord.dry_run_reply platform=discord guild_id=%s channel_id=%s message_id=%s",
+                "Dry run enabled, skipping Discord reply. platform=discord guild_id=%s channel_id=%s message_id=%s",
                 context.guild_id,
                 context.channel_id,
                 context.message_id,
@@ -324,11 +334,11 @@ class MessageRouterCog(commands.Cog):
                 log_context=log_context,
             )
         except _RETRYABLE_DISCORD_HTTP_ERRORS:
-            logger.exception("discord.thread_create_gave_up %s", log_context)
+            logger.exception("Giving up on Discord thread creation after retries. %s", log_context)
             return
         except discord.DiscordException:
             logger.exception(
-                "discord.thread_create_failed platform=discord guild_id=%s channel_id=%s message_id=%s",
+                "Failed to create Discord thread. platform=discord guild_id=%s channel_id=%s message_id=%s",
                 context.guild_id,
                 context.channel_id,
                 context.message_id,
@@ -344,11 +354,11 @@ class MessageRouterCog(commands.Cog):
                 log_context=f"{log_context} thread_id={thread.id}",
             )
         except _RETRYABLE_DISCORD_HTTP_ERRORS:
-            logger.exception("discord.thread_post_gave_up %s thread_id=%s", log_context, str(thread.id))
+            logger.exception("Giving up on posting to Discord thread after retries. %s thread_id=%s", log_context, str(thread.id))
             return
         except discord.DiscordException:
             logger.exception(
-                "discord.thread_post_failed platform=discord guild_id=%s channel_id=%s thread_id=%s message_id=%s",
+                "Failed to post message to Discord thread. platform=discord guild_id=%s channel_id=%s thread_id=%s message_id=%s",
                 context.guild_id,
                 context.channel_id,
                 str(thread.id),
@@ -357,7 +367,7 @@ class MessageRouterCog(commands.Cog):
             return
 
         logger.info(
-            "discord.replied platform=discord routing=channel_message guild_id=%s channel_id=%s thread_id=%s message_id=%s",
+            "Posted reply to Discord thread. platform=discord routing=channel_message guild_id=%s channel_id=%s thread_id=%s message_id=%s",
             context.guild_id,
             context.channel_id,
             str(thread.id),
@@ -373,7 +383,7 @@ class MessageRouterCog(commands.Cog):
             history = [m async for m in thread.history(limit=None, oldest_first=True)]
         except discord.DiscordException:
             logger.exception(
-                "discord.thread_history_failed platform=discord guild_id=%s channel_id=%s thread_id=%s message_id=%s",
+                "Failed to load Discord thread history. platform=discord guild_id=%s channel_id=%s thread_id=%s message_id=%s",
                 str(thread.guild.id) if thread.guild is not None else None,
                 str(thread.parent_id) if thread.parent_id is not None else str(thread.id),
                 str(thread.id),
@@ -402,23 +412,10 @@ class MessageRouterCog(commands.Cog):
 
         started = time.perf_counter()
         try:
-            result = await asyncio.wait_for(
-                self._ai.generate_reply(conversation=conversation, context=context),
-                timeout=self._settings.ai_timeout_seconds,
-            )
-        except asyncio.TimeoutError:
-            logger.warning(
-                "ai.timeout platform=discord guild_id=%s channel_id=%s thread_id=%s message_id=%s timeout_seconds=%s",
-                context.guild_id,
-                context.channel_id,
-                context.thread_id,
-                context.message_id,
-                self._settings.ai_timeout_seconds,
-            )
-            return
+            result = await self._ai.generate_reply(conversation=conversation, context=context)
         except Exception:
             logger.exception(
-                "ai.error platform=discord guild_id=%s channel_id=%s thread_id=%s message_id=%s",
+                "AI request failed. platform=discord guild_id=%s channel_id=%s thread_id=%s message_id=%s",
                 context.guild_id,
                 context.channel_id,
                 context.thread_id,
@@ -428,7 +425,7 @@ class MessageRouterCog(commands.Cog):
         finally:
             elapsed_ms = int((time.perf_counter() - started) * 1000)
             logger.info(
-                "ai.call platform=discord routing=thread_update guild_id=%s channel_id=%s thread_id=%s message_id=%s latency_ms=%s",
+                "AI request completed. platform=discord routing=thread_update guild_id=%s channel_id=%s thread_id=%s message_id=%s latency_ms=%s",
                 context.guild_id,
                 context.channel_id,
                 context.thread_id,
@@ -441,7 +438,7 @@ class MessageRouterCog(commands.Cog):
 
         if self._dry_run:
             logger.info(
-                "discord.dry_run_reply platform=discord guild_id=%s channel_id=%s thread_id=%s message_id=%s",
+                "Dry run enabled, skipping Discord reply. platform=discord guild_id=%s channel_id=%s thread_id=%s message_id=%s",
                 context.guild_id,
                 context.channel_id,
                 context.thread_id,
@@ -462,7 +459,7 @@ class MessageRouterCog(commands.Cog):
             )
         except _RETRYABLE_DISCORD_HTTP_ERRORS:
             logger.exception(
-                "discord.thread_post_gave_up platform=discord guild_id=%s channel_id=%s thread_id=%s message_id=%s",
+                "Giving up on posting to Discord thread after retries. platform=discord guild_id=%s channel_id=%s thread_id=%s message_id=%s",
                 context.guild_id,
                 context.channel_id,
                 context.thread_id,
@@ -471,7 +468,7 @@ class MessageRouterCog(commands.Cog):
             return
         except discord.DiscordException:
             logger.exception(
-                "discord.thread_post_failed platform=discord guild_id=%s channel_id=%s thread_id=%s message_id=%s",
+                "Failed to post message to Discord thread. platform=discord guild_id=%s channel_id=%s thread_id=%s message_id=%s",
                 context.guild_id,
                 context.channel_id,
                 context.thread_id,
@@ -480,7 +477,7 @@ class MessageRouterCog(commands.Cog):
             return
 
         logger.info(
-            "discord.replied platform=discord routing=thread_update guild_id=%s channel_id=%s thread_id=%s message_id=%s",
+            "Posted reply to Discord thread. platform=discord routing=thread_update guild_id=%s channel_id=%s thread_id=%s message_id=%s",
             context.guild_id,
             context.channel_id,
             context.thread_id,

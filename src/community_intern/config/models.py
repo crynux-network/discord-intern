@@ -44,7 +44,6 @@ class DiscordSettings(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     token: str
-    ai_timeout_seconds: float
     message_batch_wait_seconds: float
 
 

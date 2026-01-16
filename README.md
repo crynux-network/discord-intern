@@ -61,7 +61,7 @@ Start from [`./examples/config.yaml`](./examples/config.yaml) and copy it to `da
 # Any OpenAI-compatible chat completion API could be used
 ai:
   llm_base_url: "https://bridge.crynux-as.xyz/v1/llm"
-  llm_model: "Qwen/Qwen2.5-7B"
+  llm_model: "Qwen/Qwen2.5-7B-Instruct"
 ```
 
 **Prompt configuration**
