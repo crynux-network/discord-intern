@@ -94,13 +94,16 @@ ai:
     Example: {"selected_source_ids": ["some_doc.txt", "https://some.link"]}
 
   summarization_prompt: |
-    Summarize the provided text for a knowledge base index.
-    The summary must be short, plain English, and focused on what the source covers and when it is relevant.
+    Write a compact index description of the source content.
+    Focus on coverage: list the main topics, concepts, systems, features, entities, and workflows mentioned.
+    Do not paraphrase or retell the document; do not quote it.
+    Keep it short, plain English, and oriented to when the source is relevant.
 
     Output format requirements:
     Do not output intermediate steps such as thoughts; only provide the final answer.
     Do not add any preamble or markdown formatting.
     Do not output the reasoning process.
+    Do not include any other text.
 
   answer_prompt: |
     You are a bot that acts as the community manager for the Crynux Network Discord server.
