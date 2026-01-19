@@ -11,6 +11,7 @@ For the AI module, there is no separate "single message" input type: every call 
 - **discord.py**: 2.6.4
 - **langgraph**: 1.0.5
 - **langchain-openai**: 1.1.7
+- **langchain-crynux**: 0.1.0
 - **langchain-core**: 1.2.7
 
 Primary documentation entry points:

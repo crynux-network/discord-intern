@@ -15,6 +15,8 @@ The mechanism applies to:
 - The Knowledge Base MUST avoid re-fetching all URLs on every incremental update run.
 - The Knowledge Base MUST produce a stable and human-readable `index.txt`.
 - The Knowledge Base MUST keep the same processing rules across `init_kb`, application startup sync, and runtime refresh.
+- The Knowledge Base MUST run URL downloads and LLM summarization as independent phases.
+- The Knowledge Base MUST enforce separate concurrency limits for URL downloads and LLM summarization.
 
 ### Core approach
 
@@ -43,7 +45,9 @@ All configuration is loaded from `config.yaml` with environment-variable overrid
 This mechanism reads these keys under the `kb` section:
 
 - `kb.index_cache_path`
-- `kb.url_refresh_min_interval_seconds`
+- `kb.url_download_concurrency`
+- `kb.summarization_concurrency`
+- `kb.url_refresh_min_interval_hours`
 - `kb.runtime_refresh_tick_seconds`
 
 ## End-to-end workflow
@@ -58,6 +62,7 @@ Each update workflow execution MUST perform the following steps while holding a 
 - Process file sources using the rules in "File source processing".
 - Process URL sources using the rules in "URL source processing".
 - After any per-source change, persist the updated cache state and regenerate the index file at `kb.index_path`.
+- The workflow MUST run URL downloads and LLM summarization as separate phases.
 
 ### Source discovery
 
@@ -88,20 +93,16 @@ For each discovered file source, the Knowledge Base MUST apply these rules:
 - If the file source is new:
   - Load the file content as UTF-8 text.
   - Compute `content_hash`.
-  - Attempt AI summarization to produce `summary_text`.
-  - On success, store the cache record with `summary_pending = false`.
-  - On failure, store the cache record with `summary_text = ""` and `summary_pending = true`.
+  - Store the cache record with `summary_text = ""` and `summary_pending = true`.
+  - The summarization phase MUST later attempt AI summarization to produce `summary_text`.
 - If the file source exists in the cache:
   - If both `size_bytes` and `mtime_ns` match the cached values, the file MUST be treated as unchanged and the AI MUST NOT be called.
-    - If `summary_pending` is true, the Knowledge Base MUST attempt summarization using the current file content.
-      - On success, the Knowledge Base MUST set `summary_text`, `content_hash`, `last_indexed_at`, and `summary_pending = false`.
-      - On failure, the Knowledge Base MUST leave the cache record unchanged.
+    - If `summary_pending` is true, the summarization phase MUST attempt summarization using the current file content.
   - Otherwise, the Knowledge Base MUST read the file content and compute `content_hash`.
     - The Knowledge Base MUST update the cached file metadata fields `size_bytes` and `mtime_ns` to the current values.
     - If `content_hash` differs from the cached value or `summary_pending` is true:
-      - The AI module summarization method MUST be called and `summary_text` MUST be updated on success.
-      - If summarization fails, `summary_pending` MUST be set to true, `content_hash` MUST be updated to the new value, and the previous `summary_text` MUST remain unchanged.
-      - If summarization succeeds, the Knowledge Base MUST set `summary_text`, `content_hash`, `last_indexed_at`, and `summary_pending = false`.
+      - The Knowledge Base MUST set `summary_pending = true` and update `content_hash` to the new value.
+      - The summarization phase MUST later attempt AI summarization and update `summary_text` on success.
     - If `content_hash` is unchanged and `summary_pending` is false, the AI MUST NOT be called and the Knowledge Base MUST only update the cached file metadata fields `size_bytes` and `mtime_ns`.
 
 ### URL source processing
@@ -117,10 +118,8 @@ If the URL source is new (i.e., its `source_id` is not present in the loaded cac
 - The Knowledge Base MUST set `fetch_status = "success"` and `last_fetched_at = now`.
 - The Knowledge Base MUST compute `content_hash`.
 - The Knowledge Base MUST immediately store the cache record with `summary_pending = true` and `summary_text = ""`. This ensures that if the process exits before or during summarization, the downloaded content is preserved and can be summarized later without re-fetching.
-- The Knowledge Base MUST attempt AI summarization to produce `summary_text`.
-  - On success, the Knowledge Base MUST set `summary_text` and `summary_pending = false` and persist the cache record.
-  - On failure, the Knowledge Base MUST leave `summary_pending = true` and the cache record as is.
-- Each URL record MUST store `next_check_at` and the Knowledge Base MUST set `next_check_at = now + kb.url_refresh_min_interval_seconds`.
+- The summarization phase MUST attempt AI summarization to produce `summary_text`.
+- Each URL record MUST store `next_check_at` and the Knowledge Base MUST set `next_check_at = now + kb.url_refresh_min_interval_hours`.
 
 ### Existing URL source
 
@@ -138,21 +137,17 @@ If the server responds with HTTP 304:
 - The Knowledge Base MUST treat the URL as unchanged for this refresh.
 - The Knowledge Base MUST set `fetch_status = "not_modified"` and update `last_fetched_at`.
 - The Knowledge Base MUST NOT fetch URL content for this refresh.
-- The Knowledge Base MUST set `next_check_at = now + kb.url_refresh_min_interval_seconds`.
-- If `summary_pending` is true, the Knowledge Base MUST attempt summarization using cached content without issuing a network request.
-  - On success, the Knowledge Base MUST set `summary_text`, `content_hash`, `last_indexed_at`, and `summary_pending = false`.
-  - On failure or if cached content is missing, the Knowledge Base MUST leave the cache record unchanged.
+- The Knowledge Base MUST set `next_check_at = now + kb.url_refresh_min_interval_hours`.
+- If `summary_pending` is true and cached content is available, the summarization phase MUST attempt summarization without issuing a network request.
 
 If the server responds with HTTP 200:
 
 - The Knowledge Base MUST fetch content using the web fetching mechanism defined in `docs/module-knowledge-base.md` and write it to the URL content cache file for that URL.
 - The Knowledge Base MUST compute `content_hash` for the extracted content.
-- If the content is new or summarization is required, the Knowledge Base MUST call the AI module summarization method.
+- If the content is new or summarization is required, the Knowledge Base MUST set `summary_pending = true`.
   - Summarization is required when `content_hash` differs from the cached value, `summary_pending` is true, or `summary_text` is empty after trimming whitespace.
-  - Before calling the AI, if content has changed, the Knowledge Base MUST immediately update the cache record with the new `content_hash`, `summary_pending = true`, and updated fetch metadata (`etag`, `last_modified`, `fetch_status = "success"`, `last_fetched_at`), and persist the cache. This ensures the new content is acknowledged even if summarization fails.
-  - On success, the Knowledge Base MUST set `summary_text`, `content_hash`, `last_indexed_at`, and `summary_pending = false` and persist the cache.
-  - On failure, the Knowledge Base MUST leave `summary_pending = true`, MUST keep the previous `summary_text` (or empty string if new), and MUST set `next_check_at = now + kb.runtime_refresh_tick_seconds`.
-- The Knowledge Base MUST update `etag` and `last_modified` when present, set `fetch_status = "success"`, update `last_fetched_at`, and set `next_check_at = now + kb.url_refresh_min_interval_seconds`.
+  - If content has changed, the Knowledge Base MUST immediately update the cache record with the new `content_hash`, `summary_pending = true`, and updated fetch metadata (`etag`, `last_modified`, `fetch_status = "success"`, `last_fetched_at`), and persist the cache. This ensures the new content is acknowledged even if summarization fails.
+- The Knowledge Base MUST update `etag` and `last_modified` when present, set `fetch_status = "success"`, update `last_fetched_at`, and set `next_check_at = now + kb.url_refresh_min_interval_hours`.
 
 If an eligible URL check fails due to timeout, error, or unexpected HTTP status:
 
@@ -162,9 +157,7 @@ If an eligible URL check fails due to timeout, error, or unexpected HTTP status:
 
 When `summary_pending` is true for a URL and the URL is not eligible for refresh:
 
-- The Knowledge Base MUST attempt summarization using cached content without issuing conditional requests.
-- On success, the Knowledge Base MUST set `summary_text`, `content_hash`, `last_indexed_at`, and `summary_pending = false`.
-- On failure or if cached content is missing, the Knowledge Base MUST leave the cache record unchanged.
+- The summarization phase MUST attempt summarization using cached content without issuing conditional requests when cached content is available.
 
 ## Index generation
 
@@ -250,6 +243,88 @@ Before hashing, the Knowledge Base MUST normalize the text as follows:
 - The Knowledge Base MUST ensure that only one writer updates `kb.index_path` and `kb.index_cache_path` at a time.
 - When a source record is added, updated, or removed, the Knowledge Base MUST persist updates immediately for that single source change. This ensures that failures (e.g., URL download errors or LLM summarization issues) for one source do not cause the entire batch of updates to be lost.
 - Each persistence operation MUST update both `kb.index_cache_path` and `kb.index_path` to reflect the same cache state.
+
+## Shared utilities
+
+The following utilities are extracted into shared modules for reuse by both the KB module and the Team Knowledge Capture module.
+
+### Timestamp utilities (`cache_utils`)
+
+| Function | Description |
+|----------|-------------|
+| `utc_now() -> datetime` | Return current UTC datetime |
+| `format_rfc3339(dt) -> str` | Format datetime to RFC 3339 string with `Z` suffix |
+| `parse_rfc3339(value) -> datetime` | Parse RFC 3339 string to datetime |
+
+### Content utilities (`cache_utils`)
+
+| Function | Description |
+|----------|-------------|
+| `normalize_text(text) -> str` | Convert line endings to `\n`, trim trailing whitespace per line, remove leading/trailing blank lines |
+| `hash_text(text) -> str` | Normalize text, then compute SHA-256 hex digest |
+
+### Cache I/O (`cache_io`)
+
+| Function | Description |
+|----------|-------------|
+| `atomic_write_json(path, payload)` | Write JSON dict to temp file, then rename to target path |
+| `atomic_write_text(path, text)` | Write text to temp file, then rename to target path |
+| `encode_cache(cache) -> dict` | Serialize `CacheState` to JSON-serializable dict |
+| `decode_cache(payload) -> CacheState` | Deserialize dict to typed `CacheState` object |
+| `read_cache_file(path) -> CacheState` | Read cache JSON, handle missing file, validate schema version |
+
+`read_cache_file` behavior:
+- If file does not exist, return empty `CacheState`
+- If `schema_version` does not match current version, log warning and return empty `CacheState`
+- Parse JSON and return typed `CacheState` object
+
+### Index utilities (`cache_io`)
+
+| Function | Description |
+|----------|-------------|
+| `build_index_entries(cache, source_types) -> list[str]` | Build sorted index entry strings from cache for specified source types |
+| `write_index_file(path, entries)` | Join entries with blank lines and write atomically |
+
+`build_index_entries` behavior:
+- Filter records by `source_type` from the provided list
+- Skip records with empty `summary_text`
+- Sort entries by `source_id` ascending within each source type group
+- Return list of formatted entries: `"{source_id}\n{summary_text}"`
+
+`write_index_file` behavior:
+- Join entries with double newlines
+- Write atomically using `atomic_write_text`
+
+### Cache schema
+
+Both the KB cache (`index-cache.json`) and Team Knowledge cache (`index-team-cache.json`) use the same JSON schema:
+
+```json
+{
+  "schema_version": 1,
+  "generated_at": "RFC 3339 timestamp",
+  "sources": {
+    "source_id": {
+      "source_type": "file|url|team_topic",
+      "content_hash": "SHA-256 hex",
+      "summary_text": "index entry description",
+      "last_indexed_at": "RFC 3339 timestamp"
+    }
+  }
+}
+```
+
+### Source type fields
+
+| `source_type` | Additional fields | Notes |
+|---------------|-------------------|-------|
+| `file` | `file.rel_path`, `file.size_bytes`, `file.mtime_ns`, `summary_pending` | File metadata for change detection |
+| `url` | `url.url`, `url.last_fetched_at`, `url.etag`, `url.last_modified`, `url.fetch_status`, `url.next_check_at`, `summary_pending` | URL fetch metadata |
+| `team_topic` | None | No additional fields required |
+
+The `CacheRecord` model MUST support all three source types.
+
+The Team Knowledge Capture module uses these utilities for its own cache. See [`./module-team-knowledge-capture.md`](./module-team-knowledge-capture.md).
 
 ## Example artifacts
 

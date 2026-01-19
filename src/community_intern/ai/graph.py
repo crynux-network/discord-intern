@@ -1,10 +1,10 @@
 import logging
 from functools import partial
-from typing import Any, Dict, List, Optional, TypedDict
+from typing import Any, Dict, List, Optional, TYPE_CHECKING, TypedDict
 
 from langchain_core.messages import SystemMessage, HumanMessage
 from langchain_core.runnables import Runnable
-from langchain_openai import ChatOpenAI
+from langchain_crynux import ChatCrynux
 from langgraph.graph import StateGraph, END
 from pydantic import BaseModel, Field
 
@@ -13,6 +13,9 @@ from community_intern.core.models import Conversation, RequestContext, AIResult
 from community_intern.kb.interfaces import KnowledgeBase, SourceContent
 
 logger = logging.getLogger(__name__)
+
+if TYPE_CHECKING:
+    from langchain_openai import ChatOpenAI
 
 # --- Prompt composition ---
 
@@ -62,7 +65,7 @@ class LLMVerificationResult(BaseModel):
 
 # --- Nodes ---
 
-async def node_gating(state: GraphState, *, llm: ChatOpenAI) -> Dict[str, Any]:
+async def node_gating(state: GraphState, *, llm: "ChatOpenAI") -> Dict[str, Any]:
     config = state["config"]
     conversation = state["conversation"]
 
@@ -94,7 +97,7 @@ async def node_gating(state: GraphState, *, llm: ChatOpenAI) -> Dict[str, Any]:
         }
 
 
-async def node_selection(state: GraphState, *, llm: ChatOpenAI) -> Dict[str, Any]:
+async def node_selection(state: GraphState, *, llm: "ChatOpenAI") -> Dict[str, Any]:
     config = state["config"]
     kb = state["kb"]
     query = state["user_question"]
@@ -147,7 +150,7 @@ async def node_loading(state: GraphState) -> Dict[str, Any]:
     return {"loaded_sources": loaded}
 
 
-async def node_generation(state: GraphState, *, llm: ChatOpenAI) -> Dict[str, Any]:
+async def node_generation(state: GraphState, *, llm: "ChatOpenAI") -> Dict[str, Any]:
     config = state["config"]
     loaded = state["loaded_sources"]
     query = state["user_question"]
@@ -184,7 +187,7 @@ async def node_generation(state: GraphState, *, llm: ChatOpenAI) -> Dict[str, An
         return {"should_reply": False}
 
 
-async def node_verification(state: GraphState, *, llm: ChatOpenAI) -> Dict[str, Any]:
+async def node_verification(state: GraphState, *, llm: "ChatOpenAI") -> Dict[str, Any]:
     config = state["config"]
     draft = state["draft_answer"]
     loaded = state["loaded_sources"]
@@ -230,10 +233,11 @@ def build_ai_graph(config: AIConfig) -> Runnable:
     """
 
     # Initialize LLM once
-    llm = ChatOpenAI(
+    llm = ChatCrynux(
         base_url=config.llm_base_url,
         api_key=config.llm_api_key,
         model=config.llm_model,
+        vram_limit=config.vram_limit,
         temperature=0.0,
         request_timeout=config.llm_timeout_seconds,
         max_retries=config.max_retries,
