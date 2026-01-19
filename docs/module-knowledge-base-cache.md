@@ -244,6 +244,88 @@ Before hashing, the Knowledge Base MUST normalize the text as follows:
 - When a source record is added, updated, or removed, the Knowledge Base MUST persist updates immediately for that single source change. This ensures that failures (e.g., URL download errors or LLM summarization issues) for one source do not cause the entire batch of updates to be lost.
 - Each persistence operation MUST update both `kb.index_cache_path` and `kb.index_path` to reflect the same cache state.
 
+## Shared utilities
+
+The following utilities are extracted into shared modules for reuse by both the KB module and the Team Knowledge Capture module.
+
+### Timestamp utilities (`cache_utils`)
+
+| Function | Description |
+|----------|-------------|
+| `utc_now() -> datetime` | Return current UTC datetime |
+| `format_rfc3339(dt) -> str` | Format datetime to RFC 3339 string with `Z` suffix |
+| `parse_rfc3339(value) -> datetime` | Parse RFC 3339 string to datetime |
+
+### Content utilities (`cache_utils`)
+
+| Function | Description |
+|----------|-------------|
+| `normalize_text(text) -> str` | Convert line endings to `\n`, trim trailing whitespace per line, remove leading/trailing blank lines |
+| `hash_text(text) -> str` | Normalize text, then compute SHA-256 hex digest |
+
+### Cache I/O (`cache_io`)
+
+| Function | Description |
+|----------|-------------|
+| `atomic_write_json(path, payload)` | Write JSON dict to temp file, then rename to target path |
+| `atomic_write_text(path, text)` | Write text to temp file, then rename to target path |
+| `encode_cache(cache) -> dict` | Serialize `CacheState` to JSON-serializable dict |
+| `decode_cache(payload) -> CacheState` | Deserialize dict to typed `CacheState` object |
+| `read_cache_file(path) -> CacheState` | Read cache JSON, handle missing file, validate schema version |
+
+`read_cache_file` behavior:
+- If file does not exist, return empty `CacheState`
+- If `schema_version` does not match current version, log warning and return empty `CacheState`
+- Parse JSON and return typed `CacheState` object
+
+### Index utilities (`cache_io`)
+
+| Function | Description |
+|----------|-------------|
+| `build_index_entries(cache, source_types) -> list[str]` | Build sorted index entry strings from cache for specified source types |
+| `write_index_file(path, entries)` | Join entries with blank lines and write atomically |
+
+`build_index_entries` behavior:
+- Filter records by `source_type` from the provided list
+- Skip records with empty `summary_text`
+- Sort entries by `source_id` ascending within each source type group
+- Return list of formatted entries: `"{source_id}\n{summary_text}"`
+
+`write_index_file` behavior:
+- Join entries with double newlines
+- Write atomically using `atomic_write_text`
+
+### Cache schema
+
+Both the KB cache (`index-cache.json`) and Team Knowledge cache (`index-team-cache.json`) use the same JSON schema:
+
+```json
+{
+  "schema_version": 1,
+  "generated_at": "RFC 3339 timestamp",
+  "sources": {
+    "source_id": {
+      "source_type": "file|url|team_topic",
+      "content_hash": "SHA-256 hex",
+      "summary_text": "index entry description",
+      "last_indexed_at": "RFC 3339 timestamp"
+    }
+  }
+}
+```
+
+### Source type fields
+
+| `source_type` | Additional fields | Notes |
+|---------------|-------------------|-------|
+| `file` | `file.rel_path`, `file.size_bytes`, `file.mtime_ns`, `summary_pending` | File metadata for change detection |
+| `url` | `url.url`, `url.last_fetched_at`, `url.etag`, `url.last_modified`, `url.fetch_status`, `url.next_check_at`, `summary_pending` | URL fetch metadata |
+| `team_topic` | None | No additional fields required |
+
+The `CacheRecord` model MUST support all three source types.
+
+The Team Knowledge Capture module uses these utilities for its own cache. See [`./module-team-knowledge-capture.md`](./module-team-knowledge-capture.md).
+
 ## Example artifacts
 
 - An example cache file is provided at `examples/index-cache.json`.
